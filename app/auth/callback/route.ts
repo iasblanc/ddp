@@ -7,24 +7,23 @@ export async function GET(request: Request) {
   const code = searchParams.get("code");
   const next = searchParams.get("next") ?? "/dashboard";
 
+  // Usar sempre a URL de produção, nunca localhost
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || origin;
+  const redirectBase = appUrl.includes("localhost") 
+    ? "https://ddp-phi.vercel.app" 
+    : appUrl;
+
   if (code) {
     const supabase = createClient();
     const { error } = await supabase.auth.exchangeCodeForSession(code);
-
+    
     if (!error) {
-      const forwardedHost = request.headers.get("x-forwarded-host");
-      const isLocalEnv = process.env.NODE_ENV === "development";
-
-      if (isLocalEnv) {
-        return NextResponse.redirect(`${origin}${next}`);
-      } else if (forwardedHost) {
-        return NextResponse.redirect(`https://${forwardedHost}${next}`);
-      } else {
-        return NextResponse.redirect(`${origin}${next}`);
-      }
+      return NextResponse.redirect(`${redirectBase}${next}`);
     }
+    
+    console.error("Auth callback error:", error);
   }
 
-  // Falha na autenticação — redireciona para home com erro
-  return NextResponse.redirect(`${origin}/?error=auth_callback_failed`);
+  // Erro — redirigir para landing com mensagem
+  return NextResponse.redirect(`${redirectBase}/?error=auth_failed`);
 }
