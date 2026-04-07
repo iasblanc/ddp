@@ -1,8 +1,7 @@
 // @ts-nocheck
-import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
+function getAnthropic() { return new (require("@anthropic-ai/sdk").default)({ apiKey: process.env.ANTHROPIC_API_KEY }); }
 
 export async function POST(request: Request) {
   try {
@@ -13,7 +12,7 @@ export async function POST(request: Request) {
     const { dream } = await request.json();
     if (!dream?.trim()) return Response.json({ error: "Dream required" }, { status: 400 });
 
-    const message = await anthropic.messages.create({
+    const message = await getAnthropic().messages.create({
       model: "claude-haiku-4-5-20251001",
       max_tokens: 150,
       system: `You are North — the AI of Dont Dream. Plan.

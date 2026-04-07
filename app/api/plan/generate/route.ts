@@ -1,8 +1,7 @@
 // @ts-nocheck
-import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
+function getAnthropic() { return new (require("@anthropic-ai/sdk").default)({ apiKey: process.env.ANTHROPIC_API_KEY }); }
 
 export async function POST(request: Request) {
   try {
@@ -65,7 +64,7 @@ Rules:
 - Be specific — no vague actions like "research" or "think about"
 - Return ONLY valid JSON, no markdown`;
 
-    const response = await anthropic.messages.create({
+    const response = await getAnthropic().messages.create({
       model: "claude-sonnet-4-5",
       max_tokens: 1500,
       messages: [{ role: "user", content: prompt }],
@@ -75,11 +74,10 @@ Rules:
     const cleaned = text.replace(/```json|```/g, "").trim();
     const plan = JSON.parse(cleaned);
 
-    // Actualizar sonho com plano
+    // Actualizar sonho com plano (não tocar em declared_deadline aqui — é date, não text)
     await supabase.from("dreams").update({
       plan_data: plan,
       plan_generated_at: new Date().toISOString(),
-      declared_deadline: deadline || null,
       status: "active",
     }).eq("id", dreamId).eq("user_id", user.id);
 

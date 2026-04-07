@@ -35,6 +35,7 @@ export async function GET(request: Request) {
                 refresh_token: providerRefreshToken || null,
                 token_expires_at: new Date(Date.now() + 3600 * 1000).toISOString(),
                 is_active: true,
+                sync_enabled: true,
                 updated_at: new Date().toISOString(),
               })
               .eq("id", existing.id);
@@ -42,11 +43,11 @@ export async function GET(request: Request) {
             await supabase.from("calendar_integrations").insert({
               user_id: userId,
               provider: "google",
-              calendar_id: "primary",
               access_token: providerToken,
               refresh_token: providerRefreshToken || null,
               token_expires_at: new Date(Date.now() + 3600 * 1000).toISOString(),
               is_active: true,
+              sync_enabled: true,
             });
           }
         } catch (err) {

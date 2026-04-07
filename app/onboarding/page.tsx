@@ -30,18 +30,18 @@ interface Question {
 const QUESTIONS: Question[] = [
   {
     id: "deadline",
-    north: "If this dream became real, when would you want that to happen?",
-    placeholder: "In 6 months, by end of year, in 2 years...",
+    north: "Se este sonho se tornasse real, quando gostarias que isso acontecesse?",
+    placeholder: "Em 6 meses, até ao fim do ano, em 2 anos...",
   },
   {
     id: "time",
-    north: "How much time per day can you honestly dedicate to this?",
-    placeholder: "30 minutes, 1 hour...",
+    north: "Quanto tempo por dia consegues dedicar a isto de forma honesta?",
+    placeholder: "30 minutos, 1 hora...",
   },
   {
     id: "obstacle",
-    north: "What has stopped you from starting until now?",
-    placeholder: "Be honest with yourself.",
+    north: "O que te impediu de começar até agora?",
+    placeholder: "Sê honesto(a) contigo.",
   },
 ];
 
@@ -104,10 +104,10 @@ export default function OnboardingPage() {
     if (step === "north-intro") {
       northSpeak(
         <>
-          Hello. I am North.<br />
-          I will help you transform this into something real.<br /><br />
-          I am not in a hurry.<br />
-          You can begin.
+          Olá. Eu sou North.<br />
+          Vou ajudar-te a transformar isto em algo real.<br /><br />
+          Não tenho pressa.<br />
+          Podes começar.
         </>,
         "ouve",
         800
@@ -130,7 +130,7 @@ export default function OnboardingPage() {
     setDreamReflection(reflection);
 
     await northSpeak(
-      <>{reflection}<br /><br />Is that right?</>,
+      <>{reflection}<br /><br />Está certo?</>,
       "ouve",
       1800
     );
@@ -141,16 +141,16 @@ export default function OnboardingPage() {
 
   // ── STEP: dream reflection ────────────────────────────────────
   const handleReflectionYes = async () => {
-    addMessage({ id: "", type: "user", content: "Yes, that's it." });
+    addMessage({ id: "", type: "user", content: "Sim, é isso." });
     await delay(400);
     setStep("questions");
     await askNextQuestion(0);
   };
 
   const handleReflectionNo = async () => {
-    addMessage({ id: "", type: "user", content: "Not exactly." });
+    addMessage({ id: "", type: "user", content: "Não exatamente." });
     await northSpeak(
-      "Tell me more. What is the most important part I missed?",
+      "Conta-me mais. Qual é a parte mais importante que não captei?",
       "ouve",
       1000
     );
@@ -189,7 +189,7 @@ export default function OnboardingPage() {
     scrollToBottom();
 
     await northSpeak(
-      "Building your plan...",
+      "A construir o teu plano...",
       "pensa",
       400
     );
@@ -207,12 +207,12 @@ export default function OnboardingPage() {
 
     await northSpeak(
       <>
-        Your plan has three phases.<br /><br />
-        In the first — the next 3 weeks — you will take the first concrete step.<br />
-        Not because it is the most important.<br />
-        Because it will prove to yourself that this is real.<br /><br />
-        Your first block is tomorrow.<br />
-        <span className="text-muted-silver text-sm">30 minutes. Just show up.</span>
+        O teu plano tem três fases.<br /><br />
+        Na primeira — as próximas 3 semanas — vais dar o primeiro passo concreto.<br />
+        Não porque é o mais importante.<br />
+        Porque vai provar a ti mesmo(a) que isto é real.<br /><br />
+        O teu primeiro bloco é amanhã.<br />
+        <span className="text-muted-silver text-sm">30 minutos. Só aparecer.</span>
       </>,
       "pensa",
       600
@@ -221,7 +221,7 @@ export default function OnboardingPage() {
     await delay(800);
     setStep("tone-choice");
     await northSpeak(
-      "One last thing. How do you want me to talk to you when things get hard?",
+      "Uma última coisa. Como queres que eu fale contigo quando as coisas ficarem difíceis?",
       "ouve",
       1200
     );
@@ -231,15 +231,15 @@ export default function OnboardingPage() {
   const handleToneSelect = async (tone: NorthTone) => {
     setSelectedTone(tone);
     const toneLabels: Record<NorthTone, string> = {
-      direct: "Direct.",
-      gentle: "Gentle.",
-      provocative: "Challenging.",
+      direct: "Direto.",
+      gentle: "Gentil.",
+      provocative: "Desafiador.",
     };
     addMessage({ id: "", type: "user", content: toneLabels[tone] });
     await delay(400);
     setStep("calendar-connect");
     await northSpeak(
-      "Perfect. Now let's connect your calendar so your first block is in your real schedule.",
+      "Perfeito. Vamos ligar o teu calendário para o primeiro bloco estar na tua agenda real.",
       "pensa",
       1000
     );
@@ -264,7 +264,7 @@ export default function OnboardingPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Atualizar perfil do usuário
+      // Atualizar perfil do utilizador
       await supabase.from("users").update({
         north_tone: selectedTone || "direct",
         onboarding_completed_at: new Date().toISOString(),
@@ -294,7 +294,7 @@ export default function OnboardingPage() {
             last_updated: new Date().toISOString(),
           },
           execution_profile: {
-            declared_times: [answers.time || "30 minutes"],
+            declared_times: [answers.time || "30 minutos"],
             real_times: [],
             strong_days: [],
             weak_days: [],
@@ -312,14 +312,32 @@ export default function OnboardingPage() {
           },
           conversation_summaries: [],
         });
+
+        // ── GERAR PLANO VIA API ───────────────────────────────
+        // Crítico: sem plano não há blocos, sem blocos o produto não existe
+        try {
+          await fetch("/api/plan/generate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              dreamId: dream.id,
+              conversationSummary: `Sonho: ${dreamText}. Reflexo: ${dreamReflection}. Obstáculo: ${answers.obstacle || "não declarado"}.`,
+              timeAvailable: answers.time || "30 minutos por dia",
+              deadline: answers.deadline || null,
+            }),
+          });
+        } catch (planErr) {
+          console.error("Plan generation failed (non-blocking):", planErr);
+          // Não bloquear o onboarding se falhar — utilizador pode gerar depois
+        }
       }
 
       setStep("complete");
       await northSpeak(
         <>
-          Your first block is scheduled for tomorrow.<br /><br />
-          Until then, you don't need to do anything.<br />
-          Just show up.
+          O teu primeiro bloco está reservado para amanhã.<br /><br />
+          Até lá, não precisas de fazer nada.<br />
+          Só aparecer.
         </>,
         "ouve",
         600
@@ -346,7 +364,7 @@ export default function OnboardingPage() {
       return data.reflection;
     } catch {
       // Fallback local
-      return `You want to build something that is truly yours — and you stopped believing you would actually do it`;
+      return `Queres construir algo que seja verdadeiramente teu — e paraste de acreditar que realmente o farias`;
     }
   }
 

@@ -48,7 +48,7 @@ export async function POST(request: Request) {
 
     if (!block) return Response.json({ error: "Block not found" }, { status: 404 });
 
-    const calendarId = integration.calendar_id || "primary";
+    const calendarId = "primary";
 
     if (action === "create" || action === "update") {
       const event = buildBlockEvent({
@@ -90,7 +90,7 @@ export async function GET(request: Request) {
 
     const { data: integration } = await supabase
       .from("calendar_integrations")
-      .select("id, provider, calendar_id, is_active, created_at")
+      .select("id, provider, is_active, created_at")
       .eq("user_id", user.id)
       .eq("provider", "google")
       .single();

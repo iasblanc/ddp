@@ -4,9 +4,8 @@
 // Usa Claude Haiku para actualizar os 4 perfis de North
 // ============================================================
 
-import Anthropic from "@anthropic-ai/sdk";
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
+function getAnthropic() { return new (require("@anthropic-ai/sdk").default)({ apiKey: process.env.ANTHROPIC_API_KEY }); }
 
 export interface ConversationInsights {
   dream_profile_updates: Record<string, any>;
@@ -77,7 +76,7 @@ Return ONLY valid JSON with this exact structure:
 
 Return only the JSON object. No markdown, no explanation.`;
 
-    const response = await anthropic.messages.create({
+    const response = await getAnthropic().messages.create({
       model: "claude-haiku-4-5-20251001",
       max_tokens: 800,
       messages: [{ role: "user", content: prompt }],

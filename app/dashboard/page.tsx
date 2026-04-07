@@ -23,6 +23,7 @@ function DashboardContent() {
   const [conversationType, setConversationType] = useState("checkin");
   const [loading, setLoading] = useState(true);
   const [calendarConnected, setCalendarConnected] = useState(false);
+  const [generatingPlan, setGeneratingPlan] = useState(false);
   const [northMessage, setNorthMessage] = useState<string | null>(null);
   const [witnessMessage, setWitnessMessage] = useState<string | null>(null);
   const [witnesses, setWitnesses] = useState<any[]>([]);
@@ -123,6 +124,23 @@ function DashboardContent() {
     } finally { setStreaming(false); }
   }
 
+  async function generatePlan() {
+    if (!activeDream || generatingPlan) return;
+    setGeneratingPlan(true);
+    try {
+      const res = await fetch("/api/plan/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dreamId: activeDream.id }),
+      });
+      if (res.ok) {
+        await loadData();
+        router.push(`/plan?dreamId=${activeDream.id}`);
+      }
+    } catch {}
+    setGeneratingPlan(false);
+  }
+
   async function generateShareCard() {
     if (!activeDream) return;
     const res = await fetch("/api/share", {
@@ -193,8 +211,8 @@ function DashboardContent() {
             <button onClick={() => router.push("/dreams")} style={{ padding: "12px", background: T.blue, border: "none", borderRadius: "8px", color: T.light, fontSize: "13px", cursor: "pointer", fontFamily: "Inter, sans-serif" }}>+ Adicionar sonho</button>
           )}
 
-          {/* Próximo bloco */}
-          {nextBlock && (
+          {/* Próximo bloco — ou CTA de gerar plano */}
+          {nextBlock ? (
             <div>
               <p style={{ fontSize: "10px", color: T.silver, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "10px" }}>Próximo bloco</p>
               <div onClick={() => router.push(`/block/${nextBlock.id}`)} style={{ padding: "14px", background: T.surface, border: `1px solid ${T.amber}44`, borderRadius: "10px", cursor: "pointer" }}>
@@ -205,6 +223,14 @@ function DashboardContent() {
                   Executar →
                 </button>
               </div>
+            </div>
+          ) : activeDream && (
+            <div>
+              <p style={{ fontSize: "10px", color: T.silver, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "10px" }}>Plano</p>
+              <button onClick={generatePlan} disabled={generatingPlan}
+                style={{ width: "100%", padding: "12px 10px", background: generatingPlan ? T.border : `${T.blue}22`, border: `1px solid ${T.blue}44`, borderRadius: "10px", color: T.blue, fontSize: "12px", cursor: "pointer", fontFamily: "Inter, sans-serif", textAlign: "left" }}>
+                {generatingPlan ? "A gerar plano..." : "Gerar plano com North →"}
+              </button>
             </div>
           )}
 
