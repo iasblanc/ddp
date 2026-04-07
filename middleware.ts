@@ -1,14 +1,16 @@
-// @ts-nocheck
 import { NextResponse, type NextRequest } from "next/server";
-import { createServerClient } from "@supabase/ssr";
 
-const PUBLIC_ROUTES = new Set(["/", "/auth/callback", "/offline"]);
-const PUBLIC_PREFIXES = ["/_next", "/api/", "/icons", "/manifest.json", "/sw.js", "/witness/"];
+// Rotas que não precisam de auth
+const PUBLIC_ROUTES = new Set(["/", "/offline"]);
+const PUBLIC_PREFIXES = [
+  "/_next", "/api/", "/icons", "/manifest.json",
+  "/sw.js", "/witness/", "/auth/",
+];
 
-export async function middleware(request: NextRequest) {
-  const pathname = request.nextUrl.pathname;
+export function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
 
-  // Rotas completamente públicas — passar sem verificar auth
+  // Bypass completo para rotas públicas
   if (
     PUBLIC_ROUTES.has(pathname) ||
     PUBLIC_PREFIXES.some((p) => pathname.startsWith(p))
@@ -16,46 +18,20 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Para rotas protegidas — verificar sessão via cookie
-  let response = NextResponse.next({ request });
+  // Verificar cookie de sessão Supabase sem importar @supabase/ssr
+  // O cookie tem o formato: sb-<ref>-auth-token
+  const cookies = request.cookies;
+  const hasSession = [...cookies.getAll()].some(
+    (c) => c.name.startsWith("sb-") && c.name.endsWith("-auth-token")
+  );
 
-  try {
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return request.cookies.getAll();
-          },
-          setAll(cookiesToSet) {
-            cookiesToSet.forEach(({ name, value }) =>
-              request.cookies.set(name, value)
-            );
-            response = NextResponse.next({ request });
-            cookiesToSet.forEach(({ name, value, options }) =>
-              response.cookies.set(name, value, options)
-            );
-          },
-        },
-      }
-    );
-
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user) {
-      const url = request.nextUrl.clone();
-      url.pathname = "/";
-      return NextResponse.redirect(url);
-    }
-  } catch {
-    // Se falhar a verificação de auth, redirigir para home
+  if (!hasSession) {
     const url = request.nextUrl.clone();
     url.pathname = "/";
     return NextResponse.redirect(url);
   }
 
-  return response;
+  return NextResponse.next();
 }
 
 export const config = {
