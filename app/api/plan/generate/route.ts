@@ -1,7 +1,7 @@
 // @ts-nocheck
+import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
 
-function getAnthropic() { return new (require("@anthropic-ai/sdk").default)({ apiKey: process.env.ANTHROPIC_API_KEY }); }
 
 export async function POST(request: Request) {
   try {
@@ -64,7 +64,7 @@ Rules:
 - Be specific — no vague actions like "research" or "think about"
 - Return ONLY valid JSON, no markdown`;
 
-    const response = await getAnthropic().messages.create({
+    const response = await new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }).messages.create({
       model: "claude-sonnet-4-5",
       max_tokens: 1500,
       messages: [{ role: "user", content: prompt }],
@@ -93,7 +93,7 @@ Rules:
 
     return Response.json({ plan, blocks_created: blocks.length });
   } catch (error) {
-    console.error("Plan generate error:", error);
+    console.error("Plan generate error:", (error as any)?.message || error, "| KEY_SET:", !!process.env.ANTHROPIC_API_KEY);
     return Response.json({ error: "Internal server error" }, { status: 500 });
   }
 }

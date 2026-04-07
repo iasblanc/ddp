@@ -1,7 +1,7 @@
 // @ts-nocheck
+import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
 
-function getAnthropic() { return new (require("@anthropic-ai/sdk").default)({ apiKey: process.env.ANTHROPIC_API_KEY }); }
 
 export async function POST(request: Request) {
   try {
@@ -12,7 +12,7 @@ export async function POST(request: Request) {
     const { dream } = await request.json();
     if (!dream?.trim()) return Response.json({ error: "Dream required" }, { status: 400 });
 
-    const message = await getAnthropic().messages.create({
+    const message = await new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }).messages.create({
       model: "claude-haiku-4-5-20251001",
       max_tokens: 150,
       system: `You are North — the AI of Dont Dream. Plan.
@@ -42,8 +42,8 @@ Return ONLY the reflection sentence. Nothing else.`,
       : "You want to build something that is truly yours — and you stopped believing you would actually do it";
 
     return Response.json({ reflection });
-  } catch (error) {
-    console.error("Reflect API error:", error);
+  } catch (error: any) {
+    console.error("Reflect API error:", error?.message || error, "| KEY_SET:", !!process.env.ANTHROPIC_API_KEY);
     return Response.json({
       reflection: "You want to build something that is truly yours — and you stopped believing you would actually do it"
     });

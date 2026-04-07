@@ -1,4 +1,5 @@
 // @ts-nocheck
+import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
 import { buildNorthPrompt, getModelForConversation } from "@/lib/north/prompt-builder";
 import { extractInsights, mergeMemoryProfiles } from "@/lib/north/memory-updater";
@@ -6,7 +7,6 @@ import { extractInsights, mergeMemoryProfiles } from "@/lib/north/memory-updater
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-function getAnthropic() { return new (require("@anthropic-ai/sdk").default)({ apiKey: process.env.ANTHROPIC_API_KEY }); }
 
 export async function POST(request: Request) {
   try {
@@ -117,7 +117,7 @@ export async function POST(request: Request) {
           let totalTokens = 0;
           let fullResponse = "";
 
-          const response = await getAnthropic().messages.create({
+          const response = await new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }).messages.create({
             model,
             max_tokens: 1024,
             system: systemPrompt,

@@ -1,11 +1,11 @@
 // @ts-nocheck
+import Anthropic from "@anthropic-ai/sdk";
 // ── PROTOCOLO DE INACTIVIDADE DE NORTH ───────────────────────
 // Chamado por cron job (Vercel Cron ou n8n)
 // Detecta utilizadores inactivos e envia mensagem contextual
 
 import { createClient } from "@/lib/supabase/server";
 
-function getAnthropic() { return new (require("@anthropic-ai/sdk").default)({ apiKey: process.env.ANTHROPIC_API_KEY }); }
 
 export async function POST(request: Request) {
   try {
@@ -103,7 +103,7 @@ Rules for day 5 (second contact, if no response):
 
 Language: Portuguese (pt-BR). Return ONLY the message text.`;
 
-  const response = await getAnthropic().messages.create({
+  const response = await new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }).messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 100,
     messages: [{ role: "user", content: prompt }],

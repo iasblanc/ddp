@@ -24,7 +24,30 @@ function DashboardContent() {
   const [loading, setLoading] = useState(true);
   const [calendarConnected, setCalendarConnected] = useState(false);
   const [generatingPlan, setGeneratingPlan] = useState(false);
+  const [northOpening, setNorthOpening] = useState(false);
   const [northMessage, setNorthMessage] = useState<string | null>(null);
+
+  async function selectConversationType(type: string) {
+    setConversationType(type);
+    if (northOpening || streaming) return;
+    // North abre automaticamente com mensagem contextual
+    const openingMessages: Record<string, string> = {
+      checkin: "Como está a correr esta semana?",
+      extraction: "Qual é o novo sonho que queres trabalhar?",
+      pre_block: "Para qual bloco te queres preparar?",
+      post_block: "Como correu o teu último bloco?",
+      crisis: "O que está a acontecer?",
+      revaluation: "O que te fez questionar o plano?",
+    };
+    const opener = openingMessages[type];
+    if (!opener) return;
+    setNorthOpening(true);
+    setMessages(prev => prev.length === 0 ? [] : prev); // só abre se chat vazio
+    if (messages.length > 0) { setNorthOpening(false); return; } // já há conversa
+    // Simular mensagem inicial de North
+    setMessages([{ role: "assistant", content: opener, timestamp: new Date().toISOString() }]);
+    setNorthOpening(false);
+  }
   const [witnessMessage, setWitnessMessage] = useState<string | null>(null);
   const [witnesses, setWitnesses] = useState<any[]>([]);
   const [showWitnessModal, setShowWitnessModal] = useState(false);
@@ -73,12 +96,21 @@ function DashboardContent() {
       setCalendarConnected(connected);
     }
 
+    let hasRetentionMessage = false;
     if (retentionRes.ok) {
       const { north_message } = await retentionRes.json();
       if (north_message) {
+        hasRetentionMessage = true;
         setNorthMessage(north_message);
         setMessages([{ role: "assistant", content: north_message, timestamp: new Date().toISOString() }]);
       }
+    }
+
+    // Mensagem de boas-vindas quando não há mensagem de retenção
+    if (!hasRetentionMessage) {
+      const hour = new Date().getHours();
+      const greeting = hour < 12 ? "Bom dia." : hour < 18 ? "Boa tarde." : "Boa noite.";
+      setMessages([{ role: "assistant", content: `${greeting} Estou aqui.`, timestamp: new Date().toISOString() }]);
     }
 
     setLoading(false);
@@ -253,7 +285,7 @@ function DashboardContent() {
               { key: "crisis", label: "Momento difícil" },
               { key: "revaluation", label: "Reavaliar" },
             ].map(t => (
-              <button key={t.key} onClick={() => setConversationType(t.key)}
+              <button key={t.key} onClick={() => selectConversationType(t.key)}
                 style={{ display: "block", width: "100%", padding: "8px 10px", marginBottom: "3px", background: conversationType === t.key ? `${T.blue}22` : "transparent", border: `1px solid ${conversationType === t.key ? T.blue + "44" : "transparent"}`, borderRadius: "6px", color: conversationType === t.key ? T.blue : T.silver, fontSize: "12px", cursor: "pointer", textAlign: "left", fontFamily: "Inter, sans-serif" }}
               >{t.label}</button>
             ))}
