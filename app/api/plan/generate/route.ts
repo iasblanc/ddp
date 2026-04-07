@@ -5,6 +5,11 @@ import { createClient } from "@/lib/supabase/server";
 
 export async function POST(request: Request) {
   try {
+    if (!process.env.ANTHROPIC_API_KEY) {
+      console.error("Plan generate: ANTHROPIC_API_KEY not configured | KEY_SET: false");
+      return Response.json({ error: "north_unavailable" }, { status: 503 });
+    }
+
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });

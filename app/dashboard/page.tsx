@@ -131,6 +131,16 @@ function DashboardContent() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: newMessages, conversationType, dreamId: activeDream?.id }),
       });
+      if (res.status === 503) {
+        setMessages(prev => [...prev, { role: "assistant", content: "North está temporariamente indisponível. Verifica se a ANTHROPIC_API_KEY está configurada no Vercel.", timestamp: new Date().toISOString() }]);
+        setStreaming(false);
+        return;
+      }
+      if (res.status === 402) {
+        router.push("/upgrade?trigger=blocks");
+        setStreaming(false);
+        return;
+      }
       const reader = res.body!.getReader();
       const decoder = new TextDecoder();
       let full = "";
@@ -168,6 +178,12 @@ function DashboardContent() {
       if (res.ok) {
         await loadData();
         router.push(`/plan?dreamId=${activeDream.id}`);
+      } else if (res.status === 503) {
+        setMessages(prev => [...prev, {
+          role: "assistant",
+          content: "Não consigo gerar o plano agora. A ANTHROPIC_API_KEY não está configurada no Vercel. Vai a Settings → Environment Variables e adiciona a chave.",
+          timestamp: new Date().toISOString()
+        }]);
       }
     } catch {}
     setGeneratingPlan(false);

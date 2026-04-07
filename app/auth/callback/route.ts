@@ -55,7 +55,21 @@ export async function GET(request: Request) {
         }
       }
 
-      return NextResponse.redirect(`${appUrl}${next}`);
+      // Se next=/onboarding mas onboarding já foi feito, ir para dashboard
+      let finalNext = next;
+      if (next === "/onboarding" && data.session.user) {
+        try {
+          const { data: profile } = await supabase
+            .from("users")
+            .select("onboarding_completed_at")
+            .eq("id", data.session.user.id)
+            .single();
+          if (profile?.onboarding_completed_at) {
+            finalNext = "/dashboard";
+          }
+        } catch {}
+      }
+      return NextResponse.redirect(`${appUrl}${finalNext}`);
     }
 
     console.error("Auth callback error:", error);

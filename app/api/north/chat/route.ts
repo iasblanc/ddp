@@ -10,6 +10,12 @@ export const maxDuration = 60;
 
 export async function POST(request: Request) {
   try {
+    // Verificar API key antes de qualquer coisa
+    if (!process.env.ANTHROPIC_API_KEY) {
+      console.error("North API error: ANTHROPIC_API_KEY not configured");
+      return Response.json({ error: "north_unavailable", message: "North está temporariamente indisponível." }, { status: 503 });
+    }
+
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
