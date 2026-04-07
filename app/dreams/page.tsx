@@ -1,5 +1,6 @@
 // @ts-nocheck
 "use client";
+import { useAuthGuard } from "@/lib/auth-guard";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -20,6 +21,7 @@ const statusConfig: Record<string, { label: string; color: string; bg: string }>
 
 export default function DreamsPage() {
   const router = useRouter();
+  useAuthGuard();
   const [dreams, setDreams] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showNew, setShowNew] = useState(false);

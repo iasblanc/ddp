@@ -1,5 +1,6 @@
 // @ts-nocheck
 "use client";
+import { useAuthGuard } from "@/lib/auth-guard";
 import { useEffect, useState, Suspense } from "react";
 import { useRouter } from "next/navigation";
 
@@ -11,6 +12,7 @@ const T = {
 
 function DashboardContent() {
   const router = useRouter();
+  useAuthGuard();
   const [activeDream, setActiveDream] = useState<any>(null);
   const [allDreams, setAllDreams] = useState<any[]>([]);
   const [nextBlock, setNextBlock] = useState<any>(null);

@@ -1,5 +1,6 @@
 // @ts-nocheck
 "use client";
+import { useAuthGuard } from "@/lib/auth-guard";
 import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
@@ -11,6 +12,7 @@ const T = {
 
 function PlanContent() {
   const router = useRouter();
+  useAuthGuard();
   const searchParams = useSearchParams();
   const dreamId = searchParams.get("dreamId");
   const [planData, setPlanData] = useState<any>(null);
