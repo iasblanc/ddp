@@ -20,11 +20,11 @@ export default function HomePage() {
   const supabase = createClient();
 
   // Se já tem sessão activa, redirigir
-  useState(() => {
+  useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) router.replace("/dashboard");
     });
-  });
+  }, []);
 
   async function handleDreamSubmit() {
     if (!dream.trim()) return;

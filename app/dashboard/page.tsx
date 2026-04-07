@@ -24,13 +24,11 @@ function DashboardContent() {
   const [loading, setLoading] = useState(true);
   const [calendarConnected, setCalendarConnected] = useState(false);
   const [generatingPlan, setGeneratingPlan] = useState(false);
-  const [northOpening, setNorthOpening] = useState(false);
   const [northMessage, setNorthMessage] = useState<string | null>(null);
 
-  async function selectConversationType(type: string) {
+  function selectConversationType(type: string) {
     setConversationType(type);
-    if (northOpening || streaming) return;
-    // North abre automaticamente com mensagem contextual
+    if (streaming) return;
     const openingMessages: Record<string, string> = {
       checkin: "Como está a correr esta semana?",
       extraction: "Qual é o novo sonho que queres trabalhar?",
@@ -41,12 +39,11 @@ function DashboardContent() {
     };
     const opener = openingMessages[type];
     if (!opener) return;
-    setNorthOpening(true);
-    setMessages(prev => prev.length === 0 ? [] : prev); // só abre se chat vazio
-    if (messages.length > 0) { setNorthOpening(false); return; } // já há conversa
-    // Simular mensagem inicial de North
-    setMessages([{ role: "assistant", content: opener, timestamp: new Date().toISOString() }]);
-    setNorthOpening(false);
+    // Usar setter funcional para ler estado actual
+    setMessages(prev => {
+      if (prev.length > 0) return prev; // já há conversa — não substituir
+      return [{ role: "assistant", content: opener, timestamp: new Date().toISOString() }];
+    });
   }
   const [witnessMessage, setWitnessMessage] = useState<string | null>(null);
   const [witnesses, setWitnesses] = useState<any[]>([]);
