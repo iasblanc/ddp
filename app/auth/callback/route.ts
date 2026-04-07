@@ -3,27 +3,62 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 
 export async function GET(request: Request) {
-  const { searchParams, origin } = new URL(request.url);
+  const { searchParams } = new URL(request.url);
   const code = searchParams.get("code");
   const next = searchParams.get("next") ?? "/dashboard";
-
-  // Usar sempre a URL de produção, nunca localhost
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || origin;
-  const redirectBase = appUrl.includes("localhost") 
-    ? "https://ddp-phi.vercel.app" 
-    : appUrl;
+  const appUrl = "https://ddp-phi.vercel.app";
 
   if (code) {
     const supabase = createClient();
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
-    
-    if (!error) {
-      return NextResponse.redirect(`${redirectBase}${next}`);
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+
+    if (!error && data?.session) {
+      // Guardar tokens Google Calendar se disponíveis
+      const providerToken = data.session.provider_token;
+      const providerRefreshToken = data.session.provider_refresh_token;
+
+      if (providerToken && data.session.user) {
+        const userId = data.session.user.id;
+        try {
+          // Verificar se já existe integração
+          const { data: existing } = await supabase
+            .from("calendar_integrations")
+            .select("id")
+            .eq("user_id", userId)
+            .eq("provider", "google")
+            .single();
+
+          if (existing) {
+            await supabase.from("calendar_integrations")
+              .update({
+                access_token: providerToken,
+                refresh_token: providerRefreshToken || null,
+                token_expires_at: new Date(Date.now() + 3600 * 1000).toISOString(),
+                is_active: true,
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", existing.id);
+          } else {
+            await supabase.from("calendar_integrations").insert({
+              user_id: userId,
+              provider: "google",
+              calendar_id: "primary",
+              access_token: providerToken,
+              refresh_token: providerRefreshToken || null,
+              token_expires_at: new Date(Date.now() + 3600 * 1000).toISOString(),
+              is_active: true,
+            });
+          }
+        } catch (err) {
+          console.error("Calendar token save error:", err);
+        }
+      }
+
+      return NextResponse.redirect(`${appUrl}${next}`);
     }
-    
+
     console.error("Auth callback error:", error);
   }
 
-  // Erro — redirigir para landing com mensagem
-  return NextResponse.redirect(`${redirectBase}/?error=auth_failed`);
+  return NextResponse.redirect(`${appUrl}/?error=auth_failed`);
 }
