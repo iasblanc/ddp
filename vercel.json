@@ -1,4 +1,9 @@
 {
+  "framework": "nextjs",
+  "buildCommand": "next build",
+  "outputDirectory": ".next",
+  "installCommand": "npm install",
+  "regions": ["gru1"],
   "crons": [
     {
       "path": "/api/retention",
