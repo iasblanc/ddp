@@ -1,0 +1,218 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── DESIGN TOKENS: CSS VARIABLES ─────────────────────────── */
+:root {
+  /* Paleta Escura — O Mundo do Sonho */
+  --color-bg:             #0D0D14;
+  --color-surface-1:      #141420;
+  --color-surface-2:      #1A1A2E;
+  --color-text-primary:   #E8E4DC;
+  --color-text-secondary: #6B6B80;
+  --color-border:         #252538;
+  --color-border-subtle:  #1C1C2C;
+
+  /* Paleta de Acento — O Mundo da Execução */
+  --color-accent:         #4A6FA5;
+  --color-accent-dim:     #2E4A72;
+  --color-success:        #2D6A4F;
+  --color-success-dim:    #1A3D2E;
+  --color-warning:        #C9853A;
+  --color-warning-dim:    #7A4F22;
+  --color-archive:        #7B5EA7;
+  --color-archive-dim:    #4A3866;
+
+  /* Motion */
+  --transition:           all 280ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-fast:      all 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow:      all 600ms cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Radius */
+  --radius-sm:  6px;
+  --radius-md:  10px;
+  --radius-lg:  16px;
+  --radius-xl:  24px;
+  --radius-full: 9999px;
+}
+
+/* ── BASE RESET ────────────────────────────────────────────── */
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
+
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+  background-color: var(--color-bg);
+  color: var(--color-text-primary);
+}
+
+body {
+  font-family: var(--font-inter), -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── SCROLLBAR ─────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-secondary);
+}
+
+/* ── SELECTION ─────────────────────────────────────────────── */
+::selection {
+  background: rgba(74, 111, 165, 0.3);
+  color: var(--color-text-primary);
+}
+
+/* ── FOCUS VISIBLE ─────────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* ── LINKS ─────────────────────────────────────────────────── */
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* ── PLACEHOLDER ───────────────────────────────────────────── */
+::placeholder {
+  color: var(--color-text-secondary);
+  opacity: 0.7;
+}
+
+/* ── NORTH MESSAGE STREAMING ───────────────────────────────── */
+@keyframes cursor-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.north-cursor::after {
+  content: "▊";
+  font-size: 0.8em;
+  animation: cursor-blink 1s ease-in-out infinite;
+  color: var(--color-text-secondary);
+  margin-left: 2px;
+}
+
+/* ── PROGRESS BAR ANIMATION ────────────────────────────────── */
+@keyframes progress-fill {
+  from { width: 0%; }
+}
+
+.progress-bar {
+  animation: progress-fill 800ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+/* ── PAGE TRANSITIONS ──────────────────────────────────────── */
+@keyframes page-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.page-enter {
+  animation: page-fade-in 280ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ── CELEBRATION ANIMATION (silent) ────────────────────────── */
+@keyframes block-complete {
+  0%   { transform: scaleX(0); opacity: 0; }
+  60%  { transform: scaleX(1.05); opacity: 1; }
+  100% { transform: scaleX(1); opacity: 1; }
+}
+
+.block-complete-line {
+  animation: block-complete 600ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  transform-origin: left center;
+}
+
+/* ── DREAM CARD HOVER ───────────────────────────────────────── */
+.dream-card {
+  transition: var(--transition);
+}
+
+.dream-card:hover {
+  transform: translateY(-1px);
+}
+
+/* ── NORTH TYPING INDICATOR ────────────────────────────────── */
+@keyframes north-thinking {
+  0%, 80%, 100% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.north-dot {
+  animation: north-thinking 1.4s ease-in-out infinite;
+}
+
+.north-dot:nth-child(1) { animation-delay: 0s; }
+.north-dot:nth-child(2) { animation-delay: 0.2s; }
+.north-dot:nth-child(3) { animation-delay: 0.4s; }
+
+/* ── REDUCED MOTION ────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ── PWA SAFE AREAS ────────────────────────────────────────── */
+.safe-top {
+  padding-top: env(safe-area-inset-top);
+}
+
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* ── UTILITY CLASSES ───────────────────────────────────────── */
+.font-display {
+  font-family: var(--font-playfair), Georgia, serif;
+  letter-spacing: 0.04em;
+}
+
+.text-gradient-north {
+  background: linear-gradient(135deg, var(--color-text-primary), var(--color-accent));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
