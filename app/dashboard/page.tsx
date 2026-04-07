@@ -166,6 +166,7 @@ function DashboardContent() {
         <div style={{ display: "flex", gap: "8px" }}>
           {activeDream && <button onClick={() => router.push(`/plan?dreamId=${activeDream.id}`)} style={{ padding: "7px 14px", background: `${T.blue}22`, border: `1px solid ${T.blue}44`, borderRadius: "8px", color: T.blue, fontSize: "12px", cursor: "pointer", fontFamily: "Inter, sans-serif" }}>Ver Plano</button>}
           <button onClick={() => router.push("/dreams")} style={{ padding: "7px 14px", background: "transparent", border: `1px solid ${T.border}`, borderRadius: "8px", color: T.silver, fontSize: "12px", cursor: "pointer", fontFamily: "Inter, sans-serif" }}>Sonhos</button>
+          <button onClick={() => router.push("/account")} style={{ padding: "7px 14px", background: "transparent", border: `1px solid ${T.border}`, borderRadius: "8px", color: T.silver, fontSize: "12px", cursor: "pointer", fontFamily: "Inter, sans-serif" }}>Conta</button>
         </div>
       </div>
 

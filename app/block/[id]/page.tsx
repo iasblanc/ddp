@@ -329,3 +329,6 @@ export default function BlockPage() {
     </Suspense>
   );
 }
+
+// Verificação de limite foi movida para a API /api/north/chat (retorna 402)
+// A UI já trata o erro 402 redirigindo para /upgrade
