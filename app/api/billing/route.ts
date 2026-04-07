@@ -1,20 +1,26 @@
 // @ts-nocheck
-import Stripe from "stripe";
 import { createClient } from "@/lib/supabase/server";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "", { apiVersion: "2024-06-20" });
+// Inicializar Stripe de forma lazy (só em runtime, nunca em build time)
+function getStripe() {
+  const Stripe = require("stripe");
+  return new Stripe(process.env.STRIPE_SECRET_KEY || "sk_placeholder", { apiVersion: "2024-06-20" });
+}
 
-// POST — criar checkout session
 export async function POST(request: Request) {
   try {
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
+    if (!process.env.STRIPE_SECRET_KEY) {
+      return Response.json({ error: "Stripe not configured" }, { status: 503 });
+    }
+
+    const stripe = getStripe();
     const { priceId, interval } = await request.json();
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://ddp-phi.vercel.app";
 
-    // Buscar ou criar customer Stripe
     const { data: profile } = await supabase
       .from("users").select("stripe_customer_id, email").eq("id", user.id).single();
 
@@ -47,7 +53,6 @@ export async function POST(request: Request) {
   }
 }
 
-// GET — estado da subscrição
 export async function GET(request: Request) {
   try {
     const supabase = createClient();
@@ -69,13 +74,15 @@ export async function GET(request: Request) {
   }
 }
 
-// DELETE — cancelar subscrição
 export async function DELETE(request: Request) {
   try {
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
+    if (!process.env.STRIPE_SECRET_KEY) return Response.json({ error: "Stripe not configured" }, { status: 503 });
+
+    const stripe = getStripe();
     const { data: profile } = await supabase
       .from("users").select("stripe_customer_id").eq("id", user.id).single();
 
