@@ -24,26 +24,82 @@ function DashboardContent() {
   const [loading, setLoading] = useState(true);
   const [calendarConnected, setCalendarConnected] = useState(false);
   const [generatingPlan, setGeneratingPlan] = useState(false);
+  const [newDreamStep, setNewDreamStep] = useState<"idle"|"input"|"synergy"|"confirm">("idle");
+  const [newDreamText, setNewDreamText] = useState("");
+  const [newDreamInput, setNewDreamInput] = useState("");
   const [northMessage, setNorthMessage] = useState<string | null>(null);
 
   function selectConversationType(type: string) {
-    setConversationType(type);
     if (streaming) return;
-    const openingMessages: Record<string, string> = {
-      checkin: "Como está a correr esta semana?",
-      extraction: "Qual é o novo sonho que queres trabalhar?",
-      pre_block: "Para qual bloco te queres preparar?",
-      post_block: "Como correu o teu último bloco?",
-      crisis: "O que está a acontecer?",
-      revaluation: "O que te fez questionar o plano?",
+    setConversationType(type);
+    setNewDreamStep("idle");
+
+    const openers: Record<string, string> = {
+      checkin: "Como está a correr esta semana?\n\nConta-me o que aconteceu desde a última vez.",
+      pre_block: nextBlock
+        ? `O teu próximo bloco é:\n"${nextBlock.title}"\n\nHá algo que precisas de esclarecer antes de começar?`
+        : "Para que bloco te queres preparar?\nDi-me o que tens agendado.",
+      post_block: "Como correu o último bloco?\n\nO que concluíste — e o que ficou por fazer?",
+      crisis: "O que está a acontecer?\n\nNão tenho pressa. Conta.",
+      revaluation: "O que te fez questionar o plano?\n\nAlgo mudou, ou é uma dúvida que já existia?",
     };
-    const opener = openingMessages[type];
+
+    if (type === "extraction") {
+      // Fluxo especial: Novo Sonho com verificação de sinergia
+      setNewDreamStep("input");
+      setMessages([{
+        role: "assistant",
+        content: activeDream
+          ? `Tens um sonho activo: "${activeDream.title}"\n\nAntes de avançar, vou verificar a sinergia e disponibilidade de calendário.\n\nQual é o novo sonho?`
+          : "Qual é o novo sonho que queres trabalhar?",
+        timestamp: new Date().toISOString()
+      }]);
+      return;
+    }
+
+    const opener = openers[type];
     if (!opener) return;
-    // Usar setter funcional para ler estado actual
-    setMessages(prev => {
-      if (prev.length > 0) return prev; // já há conversa — não substituir
-      return [{ role: "assistant", content: opener, timestamp: new Date().toISOString() }];
-    });
+    setMessages([{ role: "assistant", content: opener, timestamp: new Date().toISOString() }]);
+  }
+
+  async function handleNewDreamSubmit() {
+    if (!newDreamInput.trim() || streaming) return;
+    const dream = newDreamInput.trim();
+    setNewDreamText(dream);
+    setNewDreamInput("");
+    setMessages(prev => [...prev, { role: "user", content: dream }]);
+
+    if (activeDream) {
+      // Verificar sinergia e disponibilidade
+      setNewDreamStep("synergy");
+      const { data: blocksData } = await fetch(`/api/blocks?dreamId=${activeDream.id}&days=30`)
+        .then(r => r.json()).catch(() => ({ data: null }));
+      const scheduled = Array.isArray(blocksData) ? blocksData.length : 0;
+      const synergyMsg = `Analisei o teu plano actual.\n\nTens ${scheduled} blocos agendados nas próximas 4 semanas para "${activeDream.title}".\n\nPosso encaixar um novo sonho em paralelo — dependendo do tempo disponível, isso pode estender os prazos ou reduzir a frequência de blocos por sonho.\n\nQueres continuar com os dois em paralelo, ou preferes terminar o primeiro antes?`;
+      setMessages(prev => [...prev, { role: "assistant", content: synergyMsg, timestamp: new Date().toISOString() }]);
+    } else {
+      // Sem plano activo — ir directo para onboarding
+      router.push(`/onboarding?dream=${encodeURIComponent(dream)}`);
+    }
+  }
+
+  async function confirmNewDream(parallel: boolean) {
+    if (parallel) {
+      router.push(`/onboarding?dream=${encodeURIComponent(newDreamText)}`);
+    } else {
+      setMessages(prev => [...prev, {
+        role: "assistant",
+        content: `Entendido. O teu sonho "${newDreamText}" fica na fila.\n\nNorth vai lembrar-te dele quando o sonho actual estiver concluído.`,
+        timestamp: new Date().toISOString()
+      }]);
+      // Criar sonho na fila
+      await fetch("/api/dreams", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: newDreamText }),
+      });
+      setNewDreamStep("idle");
+    }
   }
   const [witnessMessage, setWitnessMessage] = useState<string | null>(null);
   const [witnesses, setWitnesses] = useState<any[]>([]);
@@ -231,6 +287,7 @@ function DashboardContent() {
         <div style={{ display: "flex", gap: "8px" }}>
           {activeDream && <button onClick={() => router.push(`/plan?dreamId=${activeDream.id}`)} style={{ padding: "7px 14px", background: `${T.blue}22`, border: `1px solid ${T.blue}44`, borderRadius: "8px", color: T.blue, fontSize: "12px", cursor: "pointer", fontFamily: "Inter, sans-serif" }}>Ver Plano</button>}
           <button onClick={() => router.push(`/objectives${activeDream ? '?dreamId=' + activeDream.id : ''}`)} style={{ padding: "7px 14px", background: `${T.blue}22`, border: `1px solid ${T.blue}44`, borderRadius: "8px", color: T.blue, fontSize: "12px", cursor: "pointer", fontFamily: "Inter, sans-serif" }}>Objectivos</button>
+          <button onClick={() => router.push(`/timeline${activeDream ? '?dreamId=' + activeDream.id : ''}`)} style={{ padding: "7px 14px", background: "transparent", border: `1px solid ${T.border}`, borderRadius: "8px", color: T.silver, fontSize: "12px", cursor: "pointer", fontFamily: "Inter, sans-serif" }}>Timeline</button>
           <button onClick={() => router.push("/dreams")} style={{ padding: "7px 14px", background: "transparent", border: `1px solid ${T.border}`, borderRadius: "8px", color: T.silver, fontSize: "12px", cursor: "pointer", fontFamily: "Inter, sans-serif" }}>Sonhos</button>
           <button onClick={() => router.push("/account")} style={{ padding: "7px 14px", background: "transparent", border: `1px solid ${T.border}`, borderRadius: "8px", color: T.silver, fontSize: "12px", cursor: "pointer", fontFamily: "Inter, sans-serif" }}>Conta</button>
         </div>
@@ -365,11 +422,40 @@ function DashboardContent() {
             )}
           </div>
 
+          {/* Fluxo Novo Sonho */}
+          {newDreamStep === "input" && (
+            <div style={{ padding: "0 40px 16px", display: "flex", gap: "8px" }}>
+              <input
+                value={newDreamInput}
+                onChange={e => setNewDreamInput(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && handleNewDreamSubmit()}
+                placeholder="Descreve o novo sonho..."
+                autoFocus
+                style={{ flex: 1, background: T.card, border: `1px solid ${T.blue}44`, borderRadius: "10px", padding: "12px 16px", color: T.light, fontSize: "14px", fontFamily: "Inter, sans-serif", outline: "none" }}
+              />
+              <button onClick={handleNewDreamSubmit} disabled={!newDreamInput.trim()}
+                style={{ padding: "12px 18px", background: newDreamInput.trim() ? T.blue : T.border, border: "none", borderRadius: "10px", color: T.light, fontSize: "13px", cursor: "pointer", fontFamily: "Inter, sans-serif" }}>→</button>
+            </div>
+          )}
+          {newDreamStep === "synergy" && (
+            <div style={{ padding: "0 40px 16px", display: "flex", gap: "8px" }}>
+              <button onClick={() => confirmNewDream(true)}
+                style={{ flex: 1, padding: "12px", background: `${T.blue}22`, border: `1px solid ${T.blue}44`, borderRadius: "8px", color: T.blue, fontSize: "13px", cursor: "pointer", fontFamily: "Inter, sans-serif", fontWeight: 500 }}>
+                Ambos em paralelo
+              </button>
+              <button onClick={() => confirmNewDream(false)}
+                style={{ flex: 1, padding: "12px", background: "transparent", border: `1px solid ${T.border}`, borderRadius: "8px", color: T.silver, fontSize: "13px", cursor: "pointer", fontFamily: "Inter, sans-serif" }}>
+                Terminar o actual primeiro
+              </button>
+            </div>
+          )}
+
           <div style={{ padding: "16px 40px 28px", borderTop: `1px solid ${T.border}` }}>
             <div style={{ display: "flex", gap: "8px", alignItems: "flex-end" }}>
               <textarea value={input} onChange={e => setInput(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), sendMessage())}
-                placeholder="Escreve para North..." rows={2} disabled={streaming}
+                placeholder="Escreve para North..." rows={2}
+                disabled={streaming || newDreamStep !== "idle"}
                 style={{ flex: 1, background: T.card, border: `1px solid ${T.border}`, borderRadius: "10px", padding: "12px 16px", color: T.light, fontSize: "14px", fontFamily: "Inter, sans-serif", resize: "none", outline: "none", lineHeight: 1.5, opacity: streaming ? 0.6 : 1 }}
               />
               <button onClick={sendMessage} disabled={streaming || !input.trim()}

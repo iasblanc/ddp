@@ -116,8 +116,11 @@ function ObjectivesContent() {
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
           <span style={{ fontSize: "12px", color: T.silver }}>{totalCompleted}/{totalBlocks} tarefas · {totalHours}h total</span>
+          <button onClick={() => router.push(`/timeline?dreamId=${dreamId}`)} style={{ padding: "6px 12px", background: `${T.blue}22`, border: `1px solid ${T.blue}44`, borderRadius: "6px", color: T.blue, fontSize: "12px", cursor: "pointer", fontFamily: "Inter, sans-serif" }}>
+            Timeline
+          </button>
           <button onClick={() => router.push(`/plan?dreamId=${dreamId}`)} style={{ padding: "6px 12px", background: "transparent", border: `1px solid ${T.border}`, borderRadius: "6px", color: T.silver, fontSize: "12px", cursor: "pointer", fontFamily: "Inter, sans-serif" }}>
-            Vista Calendar
+            Plano
           </button>
         </div>
       </div>
