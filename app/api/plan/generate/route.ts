@@ -70,8 +70,8 @@ Rules:
 - Be specific — no vague actions like "research" or "think about"
 - Return ONLY valid JSON, no markdown`;
 
-    const response = await new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }).messages.create({
-      model: "claude-sonnet-4-5",
+    const response = await new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! }).messages.create({
+      model: "claude-sonnet-4-6",
       max_tokens: 1500,
       messages: [{ role: "user", content: prompt }],
     });

@@ -69,8 +69,8 @@ Return ONLY valid JSON array, no markdown:
 
 Language: Portuguese (pt-BR). Be extremely specific. Include real URLs where relevant.`;
 
-    const response = await new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }).messages.create({
-      model: "claude-sonnet-4-5",
+    const response = await new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! }).messages.create({
+      model: "claude-sonnet-4-6",
       max_tokens: 4000,
       messages: [{ role: "user", content: prompt }],
     });

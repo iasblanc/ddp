@@ -13,7 +13,7 @@ export async function POST(request: Request) {
     const { dream } = await request.json();
     if (!dream?.trim()) return Response.json({ error: "Dream required" }, { status: 400 });
 
-    const message = await new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }).messages.create({
+    const message = await new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! }).messages.create({
       model: "claude-haiku-4-5-20251001",
       max_tokens: 150,
       system: `You are North — the AI of Dont Dream. Plan.

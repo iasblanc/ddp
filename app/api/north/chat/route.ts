@@ -115,6 +115,12 @@ export async function POST(request: Request) {
       content: m.content,
     }));
 
+    // Capturar key ANTES do stream (process.env pode ser undefined dentro do callback)
+    const anthropicKey = process.env.ANTHROPIC_API_KEY;
+    if (!anthropicKey) {
+      return Response.json({ error: "north_unavailable" }, { status: 503 });
+    }
+
     // Streaming
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
@@ -123,7 +129,7 @@ export async function POST(request: Request) {
           let totalTokens = 0;
           let fullResponse = "";
 
-          const response = await new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }).messages.create({
+          const response = await new Anthropic({ apiKey: anthropicKey }).messages.create({
             model,
             max_tokens: 1024,
             system: systemPrompt,
@@ -168,7 +174,7 @@ export async function POST(request: Request) {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true, conversationId: savedConvId })}\n\n`));
           controller.close();
         } catch (error) {
-          console.error("North stream error:", error);
+          console.error("North stream error:", (error as any)?.status, (error as any)?.message, "| KEY:", anthropicKey?.slice(0, 20));
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: "Stream failed" })}\n\n`));
           controller.close();
         }

@@ -213,7 +213,7 @@ DO NOT push for a plan. Plant a seed.`,
 export function getModelForConversation(type: string): string {
   const criticalTypes = ["extraction", "crisis", "revaluation"];
   return criticalTypes.includes(type)
-    ? "claude-sonnet-4-5"
+    ? "claude-sonnet-4-6"
     : "claude-haiku-4-5-20251001";
 }
 

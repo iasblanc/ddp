@@ -55,8 +55,8 @@ Return ONLY valid JSON array, no markdown:
 
 Language: Portuguese (pt-BR). Be specific to the dream context.`;
 
-    const response = await new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }).messages.create({
-      model: "claude-sonnet-4-5",
+    const response = await new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! }).messages.create({
+      model: "claude-sonnet-4-6",
       max_tokens: 1500,
       messages: [{ role: "user", content: prompt }],
     });

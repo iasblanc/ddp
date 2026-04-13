@@ -47,7 +47,7 @@ Example format (adapt to context):
 
 Return ONLY the message text, no JSON, no quotes.`;
 
-    const response = await new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }).messages.create({
+    const response = await new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! }).messages.create({
       model: "claude-haiku-4-5-20251001",
       max_tokens: 150,
       messages: [{ role: "user", content: prompt }],
