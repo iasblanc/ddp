@@ -111,6 +111,8 @@ function DashboardContent() {
     }
 
     setLoading(false);
+    // Registar webhook Calendar em background
+    fetch("/api/calendar/webhook").catch(() => {});
   }
 
   async function sendMessage() {
@@ -228,6 +230,7 @@ function DashboardContent() {
         <p style={{ fontFamily: "'Playfair Display', serif", fontSize: "18px", fontWeight: 700, margin: 0, letterSpacing: "0.04em" }}>DP.</p>
         <div style={{ display: "flex", gap: "8px" }}>
           {activeDream && <button onClick={() => router.push(`/plan?dreamId=${activeDream.id}`)} style={{ padding: "7px 14px", background: `${T.blue}22`, border: `1px solid ${T.blue}44`, borderRadius: "8px", color: T.blue, fontSize: "12px", cursor: "pointer", fontFamily: "Inter, sans-serif" }}>Ver Plano</button>}
+          <button onClick={() => router.push(`/objectives${activeDream ? '?dreamId=' + activeDream.id : ''}`)} style={{ padding: "7px 14px", background: `${T.blue}22`, border: `1px solid ${T.blue}44`, borderRadius: "8px", color: T.blue, fontSize: "12px", cursor: "pointer", fontFamily: "Inter, sans-serif" }}>Objectivos</button>
           <button onClick={() => router.push("/dreams")} style={{ padding: "7px 14px", background: "transparent", border: `1px solid ${T.border}`, borderRadius: "8px", color: T.silver, fontSize: "12px", cursor: "pointer", fontFamily: "Inter, sans-serif" }}>Sonhos</button>
           <button onClick={() => router.push("/account")} style={{ padding: "7px 14px", background: "transparent", border: `1px solid ${T.border}`, borderRadius: "8px", color: T.silver, fontSize: "12px", cursor: "pointer", fontFamily: "Inter, sans-serif" }}>Conta</button>
         </div>
