@@ -5,58 +5,65 @@ import { createClient } from "@/lib/supabase/server";
 
 export async function POST(request: Request) {
   try {
-    if (!process.env.ANTHROPIC_API_KEY) {
+    if (!process.env.ANTHROPIC_API_KEY)
       return Response.json({ error: "north_unavailable" }, { status: 503 });
-    }
 
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { dreamId, dreamTitle, dreamReflection, deadline, timeAvailable, obstacle } = await request.json();
-    if (!dreamId || !dreamTitle) return Response.json({ error: "dreamId and dreamTitle required" }, { status: 400 });
+    const {
+      dreamId, dreamTitle, dreamReflection,
+      deadline, dailyTime, bestTime, currentLevel,
+      mainObstacle, constraints, successMetric,
+    } = await request.json();
 
     const prompt = `You are North — the AI of Dont Dream. Plan.
 
-The user has a dream: "${dreamTitle}"
-${dreamReflection ? `Deeper meaning: "${dreamReflection}"` : ""}
-${deadline ? `Timeline: ${deadline}` : ""}
-${timeAvailable ? `Daily time available: ${timeAvailable}` : ""}
-${obstacle ? `Main obstacle: "${obstacle}"` : ""}
+USER CONTEXT:
+- Dream: "${dreamTitle}"
+- Deeper meaning: "${dreamReflection || "wants to build something real"}"
+- Timeline: ${deadline || "not specified"}
+- Daily time available: ${dailyTime || "not specified"}
+- Best time of day: ${bestTime || "morning"}
+- Current level/starting point: "${currentLevel || "beginner"}"
+- Main obstacle: "${mainObstacle || "not specified"}"
+- Constraints: "${constraints || "none specified"}"
+- Success metric: "${successMetric || "not specified"}"
 
-Your task: decompose this dream into 3-6 concrete MACRO OBJECTIVES.
+TASK: Decompose this dream into 3-7 concrete MACRO OBJECTIVES.
 
-Each macro objective must be:
-- A specific, measurable pillar that, when achieved, makes the dream real
-- Phrased as a concrete outcome (not a process)
-- Ordered logically (earlier objectives enable later ones)
-- Distinct from each other (no overlap)
+Rules:
+- Each objective is a measurable PILLAR — a major capability or milestone
+- Ordered logically: earlier objectives enable later ones
+- Each objective should take 2-8 weeks of consistent 30-min sessions
+- Must be specific to THIS dream, not generic
+- Realistic given the daily time and timeline provided
 
-Respond ONLY with a valid JSON array, no markdown, no explanation:
+Return ONLY valid JSON array, no markdown:
 [
   {
-    "title": "Short objective title (max 6 words)",
-    "description": "One sentence: what achieving this looks like concretely",
-    "why": "One sentence: why this is essential to the dream",
+    "title": "Specific objective title (max 7 words, action-oriented)",
+    "description": "What achieving this looks like in concrete terms (1-2 sentences)",
+    "why": "Why this is essential — what breaks without it (1 sentence)",
     "order_index": 0,
     "estimated_weeks": 4,
-    "blocks_per_week": 3
+    "blocks_per_week": 3,
+    "priority": "high"
   }
 ]
 
-Language: Portuguese (pt-BR). Return ONLY the JSON array.`;
+Language: Portuguese (pt-BR). Be specific to the dream context.`;
 
     const response = await new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }).messages.create({
       model: "claude-sonnet-4-5",
-      max_tokens: 1200,
+      max_tokens: 1500,
       messages: [{ role: "user", content: prompt }],
     });
 
     const text = response.content[0].type === "text" ? response.content[0].text.trim() : "[]";
-    const cleaned = text.replace(/```json|```/g, "").trim();
-    const objectives = JSON.parse(cleaned);
+    const objectives = JSON.parse(text.replace(/```json|```/g, "").trim());
 
-    // Persistir objectivos na DB
     const rows = objectives.map((obj: any, idx: number) => ({
       dream_id: dreamId,
       user_id: user.id,
@@ -66,11 +73,7 @@ Language: Portuguese (pt-BR). Return ONLY the JSON array.`;
       order_index: obj.order_index ?? idx,
     }));
 
-    const { data: saved, error } = await supabase
-      .from("objectives")
-      .insert(rows)
-      .select();
-
+    const { data: saved, error } = await supabase.from("objectives").insert(rows).select();
     if (error) throw error;
 
     return Response.json({ objectives: saved, raw: objectives });
