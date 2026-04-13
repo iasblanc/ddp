@@ -1,4 +1,5 @@
 // @ts-nocheck
+export const dynamic = "force-dynamic";
 import { createClient } from "@/lib/supabase/server";
 
 export async function GET(request: Request, { params }: { params: { id: string } }) {

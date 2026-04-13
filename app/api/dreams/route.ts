@@ -1,4 +1,5 @@
 // @ts-nocheck
+export const dynamic = "force-dynamic";
 import { createClient } from "@/lib/supabase/server";
 import { detectMaturityStage } from "@/lib/north/prompt-builder";
 

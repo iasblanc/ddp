@@ -1,4 +1,5 @@
 // @ts-nocheck
+export const dynamic = "force-dynamic";
 import Anthropic from "@anthropic-ai/sdk";
 // ── PROTOCOLO DE INACTIVIDADE DE NORTH ───────────────────────
 // Chamado por cron job (Vercel Cron ou n8n)

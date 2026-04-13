@@ -1,4 +1,5 @@
 // @ts-nocheck
+export const dynamic = "force-dynamic";
 // ── HEALTH CHECK — diagnóstico rápido do estado do sistema ───────
 import { createClient } from "@/lib/supabase/server";
 

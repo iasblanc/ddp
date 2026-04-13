@@ -1,4 +1,5 @@
 // @ts-nocheck
+export const dynamic = "force-dynamic";
 import { createClient } from "@/lib/supabase/server";
 
 // Inicializar Stripe de forma lazy (só em runtime, nunca em build time)
