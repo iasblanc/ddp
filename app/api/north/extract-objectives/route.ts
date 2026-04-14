@@ -1,5 +1,6 @@
 // @ts-nocheck
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
 
