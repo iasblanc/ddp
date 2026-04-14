@@ -70,6 +70,7 @@ function OnboardingContent() {
   const [objectives, setObjectives] = useState<any[]>([]);
   const [dreamId, setDreamId] = useState<string | null>(null);
   const [tone, setTone] = useState<string | null>(null);
+  const [buildError, setBuildError] = useState<string | null>(null);
 
   const scroll = useCallback(() => {
     setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 80);
@@ -244,81 +245,108 @@ function OnboardingContent() {
       600
     );
     setPhase("building");
+    setBuildError(null);
     setThinking(true);
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { router.push("/"); return; }
+    try {
+      // Verificar autenticação
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) {
+        setBuildError("Sessão expirada. Faça login novamente.");
+        setThinking(false);
+        return;
+      }
 
-    const { data: dream } = await supabase.from("dreams").insert({
-      user_id: user.id, title: dreamText, status: "active",
-      maturity_stage: 3, activated_at: new Date().toISOString(),
-    }).select().single();
+      // Criar sonho
+      const { data: dream, error: dreamError } = await supabase.from("dreams").insert({
+        user_id: user.id, title: dreamText, status: "active",
+        maturity_stage: 3, activated_at: new Date().toISOString(),
+      }).select().single();
 
-    if (!dream) { setThinking(false); return; }
-    setDreamId(dream.id);
+      if (dreamError || !dream) {
+        console.error("Dream insert error:", dreamError?.message);
+        setBuildError("Erro ao salvar o sonho. Tenta novamente.");
+        setThinking(false);
+        return;
+      }
+      setDreamId(dream.id);
 
-    // Salvar memória — inclui contexto da exploração livre
-    const exploreContext = exploreHistory
-      .filter(h => h.role === "user")
-      .map(h => h.content)
-      .join(" | ");
+      // Salvar memória
+      const exploreContext = exploreHistory
+        .filter(h => h.role === "user")
+        .map(h => h.content)
+        .join(" | ");
 
-    await supabase.from("dream_memories").insert({
-      dream_id: dream.id, user_id: user.id,
-      dream_profile: {
-        dream_declared: dreamText,
-        dream_real: dreamReflection,
-        explore_context: exploreContext,
-        deadline_declared: allAnswers.deadline || null,
-        obstacle_declared: null,
-        success_metric: allAnswers.success_metric || null,
-        current_level: allAnswers.current_level || null,
-        recurring_words: [], previous_attempts: [],
-        last_updated: new Date().toISOString(),
-      },
-      execution_profile: {
-        declared_times: [allAnswers.daily_time || "30 minutos"],
-        best_time: allAnswers.best_time || null,
-        constraints: allAnswers.constraints || null,
-        real_times: [], strong_days: [], weak_days: [],
-        avg_real_duration: 30, current_streak: 0, best_streak: 0,
-      },
-      emotional_profile: {
-        preferred_tone: "direct", reacts_badly_to: [], reacts_well_to: [],
-        crisis_moments: [], abandonment_triggers: [], resistance_language: [],
-      },
-      conversation_summaries: [],
-    });
+      const { error: memError } = await supabase.from("dream_memories").insert({
+        dream_id: dream.id, user_id: user.id,
+        dream_profile: {
+          dream_declared: dreamText, dream_real: dreamReflection,
+          explore_context: exploreContext,
+          deadline_declared: allAnswers.deadline || null,
+          success_metric: allAnswers.success_metric || null,
+          current_level: allAnswers.current_level || null,
+          recurring_words: [], previous_attempts: [],
+          last_updated: new Date().toISOString(),
+        },
+        execution_profile: {
+          declared_times: [allAnswers.daily_time || "30 minutos"],
+          best_time: allAnswers.best_time || null,
+          constraints: allAnswers.constraints || null,
+          real_times: [], strong_days: [], weak_days: [],
+          avg_real_duration: 30, current_streak: 0, best_streak: 0,
+        },
+        emotional_profile: {
+          preferred_tone: "direct", reacts_badly_to: [], reacts_well_to: [],
+          crisis_moments: [], abandonment_triggers: [], resistance_language: [],
+        },
+        conversation_summaries: [],
+      });
 
-    // Gerar objectivos com contexto completo (incluindo exploração)
-    const res = await fetch("/api/north/extract-objectives", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        dreamId: dream.id,
-        dreamTitle: dreamText,
-        dreamReflection,
-        exploreContext,
-        deadline: allAnswers.deadline,
-        dailyTime: allAnswers.daily_time,
-        bestTime: allAnswers.best_time,
-        currentLevel: allAnswers.current_level,
-        constraints: allAnswers.constraints,
-        successMetric: allAnswers.success_metric,
-      }),
-    });
+      if (memError) console.error("Memory insert error:", memError?.message);
+      // Não bloqueia — memória é importante mas não crítica
 
-    setThinking(false);
+      // Gerar objectivos
+      const res = await fetch("/api/north/extract-objectives", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dreamId: dream.id, dreamTitle: dreamText, dreamReflection,
+          exploreContext,
+          deadline: allAnswers.deadline, dailyTime: allAnswers.daily_time,
+          bestTime: allAnswers.best_time, currentLevel: allAnswers.current_level,
+          constraints: allAnswers.constraints, successMetric: allAnswers.success_metric,
+        }),
+      });
 
-    if (res.ok) {
-      const { objectives: objs } = await res.json();
-      setObjectives(objs || []);
+      setThinking(false);
+
+      if (!res.ok) {
+        setBuildError(`Erro ao gerar objetivos (${res.status}). Tenta novamente.`);
+        return;
+      }
+
+      const data = await res.json();
+      if (data.error) {
+        setBuildError("North não conseguiu gerar os objetivos. Tenta novamente.");
+        return;
+      }
+
+      const objs = data.objectives || [];
+      if (objs.length === 0) {
+        setBuildError("Nenhum objetivo foi gerado. Tenta novamente.");
+        return;
+      }
+
+      setObjectives(objs);
       await addNorth(
-        `Com base em tudo que você me contou, identifiquei ${objs?.length || 0} objetivos macro para tornar esse sonho real.\n\nVerifica se os pilares fazem sentido para você.`,
+        `Com base em tudo que você me contou, identifiquei ${objs.length} objetivos macro.\n\nVerifica se os pilares fazem sentido para você.`,
         500
       );
       setPhase("review");
-    } else {
-      await addNorth("Algo deu errado. Tenta novamente.", 400);
+
+    } catch (err: any) {
+      console.error("buildObjectives error:", err?.message);
+      setThinking(false);
+      setBuildError("Erro inesperado. Tenta novamente.");
     }
   }
 
@@ -454,6 +482,23 @@ function OnboardingContent() {
             </div>
           )}
 
+          {/* Erro na fase building + botão retry */}
+          {buildError && phase === "building" && (
+            <div style={{ padding: "16px 20px", background: `${T.amber}11`, border: `1px solid ${T.amber}44`, borderRadius: "10px" }}>
+              <p style={{ margin: "0 0 12px", fontSize: "13px", color: T.amber, lineHeight: 1.5 }}>{buildError}</p>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <button onClick={() => buildObjectives(answers)}
+                  style={{ flex: 1, padding: "10px", background: T.blue, border: "none", borderRadius: "8px", color: T.light, fontSize: "12px", fontWeight: 500, cursor: "pointer", fontFamily: "Inter, sans-serif" }}>
+                  Tentar novamente
+                </button>
+                <button onClick={() => router.push("/dashboard")}
+                  style={{ flex: 1, padding: "10px", background: "transparent", border: `1px solid ${T.border}`, borderRadius: "8px", color: T.silver, fontSize: "12px", cursor: "pointer", fontFamily: "Inter, sans-serif" }}>
+                  Ir para o dashboard
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Sim / Não exatamente */}
           {phase === "reflection" && (
             <div style={{ display: "flex", gap: "8px" }}>
@@ -528,6 +573,16 @@ function OnboardingContent() {
       </div>
 
       {/* Input */}
+      {/* Botão de escape — sempre visível excepto na intro */}
+      {phase !== "intro" && phase !== "complete" && !showInput && phase !== "review" && phase !== "tone" && (
+        <div style={{ padding: "0 24px 24px", maxWidth: "600px", margin: "0 auto", width: "100%", boxSizing: "border-box" }}>
+          <button onClick={() => router.push("/dashboard")}
+            style={{ width: "100%", padding: "11px", background: "transparent", border: `1px solid ${T.border}`, borderRadius: "10px", color: T.silver, fontSize: "12px", cursor: "pointer", fontFamily: "Inter, sans-serif" }}>
+            {phase === "building" ? "Cancelar e ir para o dashboard" : "← Voltar ao dashboard"}
+          </button>
+        </div>
+      )}
+
       {showInput && (
         <div style={{ padding: "16px 24px 32px", maxWidth: "600px", margin: "0 auto", width: "100%", boxSizing: "border-box" }}>
           {/* Placeholder contextual */}
@@ -541,6 +596,12 @@ function OnboardingContent() {
               Dados do plano
             </p>
           )}
+          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "4px" }}>
+            <button onClick={() => router.push("/dashboard")}
+              style={{ background: "none", border: "none", color: T.silver, fontSize: "11px", cursor: "pointer", fontFamily: "Inter, sans-serif", opacity: 0.6 }}>
+              Sair
+            </button>
+          </div>
           <div style={{ display: "flex", gap: "8px" }}>
             <textarea
               ref={inputRef}
