@@ -27,14 +27,25 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
     const totalBlocks = Math.min(12, Math.max(6, Number(weeks) * Number(blocksPerWeek)));
 
-    // ── 1. Buscar último slot ocupado do usuário ─────────────────────────────
-    const { data: lastBlock } = await supabase
+    // ── 1. Buscar slots já ocupados do utilizador ────────────────────────────
+    const { data: existingBlocks } = await supabase
       .from("blocks")
       .select("scheduled_at")
       .eq("user_id", user.id)
-      .order("scheduled_at", { ascending: false })
-      .limit(1)
-      .single();
+      .in("status", ["scheduled", "active"])
+      .order("scheduled_at", { ascending: false });
+
+    const lastBlock = existingBlocks?.[0] || null;
+
+    // Construir Set de slots ocupados para evitar colisões
+    const occupiedSlots = new Set<string>();
+    for (const b of existingBlocks || []) {
+      const d = new Date(b.scheduled_at);
+      const dayKey = d.toISOString().slice(0, 10);
+      const h = String(d.getHours()).padStart(2, "0");
+      const m = String(d.getMinutes()).padStart(2, "0");
+      occupiedSlots.add(`${dayKey}_${h}:${m}`);
+    }
 
     // ── 2. Gerar conteúdo das tarefas com Claude ─────────────────────────────
     const prompt = `You are North. Return ONLY a JSON array — no text before or after, no markdown.
@@ -75,8 +86,10 @@ START WITH [ END WITH ]`;
       objectiveId: params.id,
       dreamId: objective.dream_id,
       bestTime,
+      dailyTime,
       blocksPerWeek: Number(blocksPerWeek),
       lastOccupiedSlot: lastBlock?.scheduled_at ? new Date(lastBlock.scheduled_at) : null,
+      occupiedSlots,
     });
 
     // ── 4. Persistir ─────────────────────────────────────────────────────────
@@ -99,73 +112,140 @@ START WITH [ END WITH ]`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SCHEDULER — distribui blocos em slots únicos sem sobreposição
+// SCHEDULER — múltiplos blocos por dia dentro da janela de tempo do utilizador
 // ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Analisa "1 hora por dia", "2 horas", "30 minutos", etc.
+ * Retorna número de blocos de 30min que cabem nesse tempo.
+ */
+function parseDailyBlocks(dailyTime: string): number {
+  if (!dailyTime) return 1;
+  const t = dailyTime.toLowerCase();
+
+  // Detectar horas
+  const hoursMatch = t.match(/(\d+(?:[.,]\d+)?)\s*h/);
+  if (hoursMatch) {
+    const hours = parseFloat(hoursMatch[1].replace(",", "."));
+    return Math.max(1, Math.floor(hours * 2)); // 2 blocos por hora
+  }
+
+  // Detectar minutos
+  const minsMatch = t.match(/(\d+)\s*min/);
+  if (minsMatch) {
+    const mins = parseInt(minsMatch[1]);
+    return Math.max(1, Math.floor(mins / 30));
+  }
+
+  // Textos comuns
+  if (t.includes("30 minutos") || t.includes("meia hora")) return 1;
+  if (t.includes("1 hora") || t.includes("uma hora")) return 2;
+  if (t.includes("2 horas") || t.includes("duas horas")) return 4;
+  if (t.includes("3 horas") || t.includes("três horas")) return 6;
+  if (t.includes("4 horas") || t.includes("quatro horas")) return 8;
+
+  return 1;
+}
+
+/**
+ * Mapeia horário preferido → hora de início da janela
+ */
+function parseStartHour(bestTime: string): number {
+  const t = (bestTime || "").toLowerCase().trim();
+  const timeMap: Record<string, number> = {
+    "manhã": 7, "manha": 7, "cedo": 6, "morning": 7,
+    "meio-dia": 12, "almoço": 12, "almoco": 12,
+    "tarde": 14, "afternoon": 14,
+    "noite": 19, "evening": 19, "night": 20,
+    "antes do trabalho": 6,
+    "depois do trabalho": 18,
+  };
+  for (const [key, hour] of Object.entries(timeMap)) {
+    if (t.includes(key)) return hour;
+  }
+  // Tentar extrair hora numérica "às 9h", "9:00", "09"
+  const numMatch = t.match(/(\d{1,2})(?:h|:)/);
+  if (numMatch) return parseInt(numMatch[1]);
+  return 9;
+}
+
 function scheduleBlocks({
-  taskDefs, userId, objectiveId, dreamId, bestTime, blocksPerWeek, lastOccupiedSlot,
+  taskDefs, userId, objectiveId, dreamId, bestTime, dailyTime, blocksPerWeek, lastOccupiedSlot, occupiedSlots,
 }: {
   taskDefs: any[], userId: string, objectiveId: string, dreamId: string,
-  bestTime: string, blocksPerWeek: number, lastOccupiedSlot: Date | null,
+  bestTime: string, dailyTime: string, blocksPerWeek: number,
+  lastOccupiedSlot: Date | null,
+  occupiedSlots: Set<string>, // "YYYY-MM-DD_HH:MM" já ocupados
 }) {
-  // Mapear horário preferido → hora do dia
-  const timeMap: Record<string, number> = {
-    "manhã": 9, "manha": 9, morning: 9,
-    "meio-dia": 12, afternoon: 14, tarde: 15,
-    noite: 20, evening: 19, night: 20,
-  };
-  const hour = timeMap[bestTime?.toLowerCase().trim()] ?? 9;
+  const blocksPerDay = parseDailyBlocks(dailyTime);
+  const startHour = parseStartHour(bestTime);
 
-  // Dias de trabalho baseados em blocksPerWeek
-  // Spread uniforme na semana (0=Dom, 1=Seg, ..., 6=Sáb)
+  // Dias de trabalho por semana
   const workDaysByFreq: Record<number, number[]> = {
-    1: [1],           // só segunda
-    2: [1, 4],        // seg + qui
-    3: [1, 3, 5],     // seg + qua + sex
-    4: [1, 2, 4, 5],  // seg + ter + qui + sex
-    5: [1, 2, 3, 4, 5], // seg a sex
-    6: [1, 2, 3, 4, 5, 6],
-    7: [0, 1, 2, 3, 4, 5, 6],
+    1: [1], 2: [1, 4], 3: [1, 3, 5],
+    4: [1, 2, 4, 5], 5: [1, 2, 3, 4, 5],
+    6: [1, 2, 3, 4, 5, 6], 7: [0, 1, 2, 3, 4, 5, 6],
   };
   const freq = Math.min(7, Math.max(1, blocksPerWeek));
   const workDays = workDaysByFreq[freq] ?? [1, 3, 5];
 
-  // Ponto de partida: dia seguinte ao último bloco do usuário (ou amanhã)
-  let cursor = new Date();
-  cursor.setHours(0, 0, 0, 0);
+  function isWorkDay(d: Date) { return workDays.includes(d.getDay()); }
 
+  function advanceToWorkDay(d: Date): Date {
+    const r = new Date(d);
+    let i = 0;
+    while (!isWorkDay(r) && i++ < 14) r.setDate(r.getDate() + 1);
+    return r;
+  }
+
+  // Cursor inicial: amanhã ou dia seguinte ao último bloco
+  let cursorDay = new Date();
+  cursorDay.setHours(0, 0, 0, 0);
   if (lastOccupiedSlot) {
     const lastDate = new Date(lastOccupiedSlot);
     lastDate.setHours(0, 0, 0, 0);
-    // Começar no dia seguinte ao último bloco
-    cursor = new Date(lastDate);
-    cursor.setDate(cursor.getDate() + 1);
-  } else {
-    // Amanhã
-    cursor.setDate(cursor.getDate() + 1);
-  }
-
-  // Avançar cursor até ao próximo dia de trabalho
-  function advanceToNextWorkDay(d: Date): Date {
-    const result = new Date(d);
-    let attempts = 0;
-    while (!workDays.includes(result.getDay()) && attempts < 14) {
-      result.setDate(result.getDate() + 1);
-      attempts++;
+    cursorDay = new Date(lastDate);
+    // Verificar se ainda há capacidade hoje ou avançar para amanhã
+    const todayKey = lastDate.toISOString().slice(0, 10);
+    const slotsToday = [...occupiedSlots].filter(s => s.startsWith(todayKey)).length;
+    if (slotsToday >= blocksPerDay) {
+      cursorDay.setDate(cursorDay.getDate() + 1);
     }
-    return result;
+  } else {
+    cursorDay.setDate(cursorDay.getDate() + 1);
   }
+  cursorDay = advanceToWorkDay(cursorDay);
 
-  cursor = advanceToNextWorkDay(cursor);
+  // Slot pointer dentro do dia
+  let cursorDayKey = cursorDay.toISOString().slice(0, 10);
+  let slotsUsedToday = [...occupiedSlots].filter(s => s.startsWith(cursorDayKey)).length;
 
-  return taskDefs.map((def: any, idx: number) => {
-    const slotDate = new Date(cursor);
-    slotDate.setHours(hour, 0, 0, 0);
+  const scheduled: any[] = [];
 
-    // Avançar cursor para o próximo dia de trabalho disponível
-    cursor.setDate(cursor.getDate() + 1);
-    cursor = advanceToNextWorkDay(cursor);
+  for (let i = 0; i < taskDefs.length; i++) {
+    const def = taskDefs[i];
 
-    return {
+    // Avançar para o próximo slot disponível dentro do dia
+    if (slotsUsedToday >= blocksPerDay) {
+      // Dia cheio → próximo dia de trabalho
+      cursorDay.setDate(cursorDay.getDate() + 1);
+      cursorDay = advanceToWorkDay(cursorDay);
+      cursorDayKey = cursorDay.toISOString().slice(0, 10);
+      slotsUsedToday = [...occupiedSlots].filter(s => s.startsWith(cursorDayKey)).length;
+    }
+
+    // Hora do slot: startHour + (slotsUsedToday * 0.5 horas)
+    const blockHour = startHour + Math.floor(slotsUsedToday * 0.5);
+    const blockMin = (slotsUsedToday % 2 === 0) ? 0 : 30;
+
+    const slotDate = new Date(cursorDay);
+    slotDate.setHours(blockHour, blockMin, 0, 0);
+
+    const slotKey = `${cursorDayKey}_${String(blockHour).padStart(2,"0")}:${String(blockMin).padStart(2,"0")}`;
+    occupiedSlots.add(slotKey);
+    slotsUsedToday++;
+
+    scheduled.push({
       objective_id: objectiveId,
       dream_id: dreamId,
       user_id: userId,
@@ -177,11 +257,13 @@ function scheduleBlocks({
       duration_minutes: 30,
       scheduled_at: slotDate.toISOString(),
       status: "scheduled",
-      is_critical: idx === 0,
-      phase_number: Math.floor(idx / blocksPerWeek) + 1,
-      week_number: Math.floor(idx / blocksPerWeek) + 1,
-    };
-  });
+      is_critical: i === 0,
+      phase_number: Math.floor(i / blocksPerDay) + 1,
+      week_number: Math.floor(i / (blocksPerDay * 5)) + 1,
+    });
+  }
+
+  return scheduled;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

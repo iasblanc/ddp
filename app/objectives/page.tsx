@@ -108,6 +108,7 @@ function ObjectivesContent() {
       body: JSON.stringify({
         dreamId,
         bestTime: answers.bestTime || "manhã",
+        dailyTime: answers.dailyTime || "1 hora",
         blocksPerWeek: 3,
       }),
     });

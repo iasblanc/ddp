@@ -9,7 +9,7 @@ export async function POST(request: Request) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { dreamId, bestTime = "manhã", blocksPerWeek = 3 } = await request.json();
+    const { dreamId, bestTime = "manhã", dailyTime = "1 hora", blocksPerWeek = 3 } = await request.json();
 
     // Buscar todos os blocos agendados (não concluídos) deste sonho, ordenados por phase/week e order
     const { data: blocks } = await supabase
@@ -37,6 +37,30 @@ export async function POST(request: Request) {
     const freq = Math.min(5, Math.max(1, Number(blocksPerWeek)));
     const workDays = workDaysByFreq[freq] ?? [1, 3, 5];
 
+    // Parsear blocos por dia com base no tempo disponível
+    function parseDailyBlocks(t: string): number {
+      if (!t) return 1;
+      const s = t.toLowerCase();
+      const hMatch = s.match(/(\d+(?:[.,]\d+)?)\s*h/);
+      if (hMatch) return Math.max(1, Math.floor(parseFloat(hMatch[1].replace(",",".")) * 2));
+      const mMatch = s.match(/(\d+)\s*min/);
+      if (mMatch) return Math.max(1, Math.floor(parseInt(mMatch[1]) / 30));
+      if (s.includes("1 hora") || s.includes("uma hora")) return 2;
+      if (s.includes("2 horas") || s.includes("duas horas")) return 4;
+      return 1;
+    }
+    function parseStartHour(t: string): number {
+      const s = (t||"").toLowerCase();
+      if (s.includes("manhã") || s.includes("manha")) return 7;
+      if (s.includes("tarde")) return 14;
+      if (s.includes("noite")) return 19;
+      const m = s.match(/(\d{1,2})(?:h|:)/);
+      return m ? parseInt(m[1]) : 9;
+    }
+
+    const blocksPerDayCount = parseDailyBlocks(dailyTime);
+    const startHour = parseStartHour(bestTime);
+
     // Começar amanhã
     let cursor = new Date();
     cursor.setHours(0, 0, 0, 0);
@@ -50,14 +74,24 @@ export async function POST(request: Request) {
     }
     cursor = advanceToWorkDay(cursor);
 
-    // Redistribuir blocos sequencialmente — 1 por slot
+    // Redistribuir blocos — múltiplos por dia dentro da janela
     const updates: Array<{ id: string; scheduled_at: string }> = [];
+    let slotsUsedToday = 0;
+    let cursorDayKey = cursor.toISOString().slice(0, 10);
+
     for (const block of blocks) {
+      if (slotsUsedToday >= blocksPerDayCount) {
+        cursor.setDate(cursor.getDate() + 1);
+        cursor = advanceToWorkDay(cursor);
+        cursorDayKey = cursor.toISOString().slice(0, 10);
+        slotsUsedToday = 0;
+      }
+      const blockHour = startHour + Math.floor(slotsUsedToday * 0.5);
+      const blockMin = (slotsUsedToday % 2 === 0) ? 0 : 30;
       const slot = new Date(cursor);
-      slot.setHours(hour, 0, 0, 0);
+      slot.setHours(blockHour, blockMin, 0, 0);
       updates.push({ id: block.id, scheduled_at: slot.toISOString() });
-      cursor.setDate(cursor.getDate() + 1);
-      cursor = advanceToWorkDay(cursor);
+      slotsUsedToday++;
     }
 
     // Actualizar em batch
