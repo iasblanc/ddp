@@ -95,6 +95,29 @@ function ObjectivesContent() {
   }
 
   const [generateError, setGenerateError] = useState<string | null>(null);
+  const [rescheduling, setRescheduling] = useState(false);
+  const [rescheduleMsg, setRescheduleMsg] = useState<string | null>(null);
+
+  async function rescheduleAll() {
+    if (!dreamId) return;
+    setRescheduling(true);
+    setRescheduleMsg(null);
+    const res = await fetch("/api/blocks/reschedule", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        dreamId,
+        bestTime: answers.bestTime || "manhã",
+        blocksPerWeek: 3,
+      }),
+    });
+    if (res.ok) {
+      const { rescheduled } = await res.json();
+      setRescheduleMsg(`${rescheduled} blocos reagendados sem sobreposições.`);
+      await loadData();
+    }
+    setRescheduling(false);
+  }
 
   async function generateBlocks(objId: string) {
     setGenerating(objId);
@@ -161,6 +184,13 @@ function ObjectivesContent() {
             style={{ padding: "6px 12px", background: "transparent", border: `1px solid ${T.border}`, borderRadius: "6px", color: T.silver, fontSize: "11px", cursor: "pointer", fontFamily: "Inter, sans-serif" }}>
             Timeline
           </button>
+          {totalBlocks > 0 && (
+            <button onClick={rescheduleAll} disabled={rescheduling}
+              style={{ padding: "6px 12px", background: rescheduling ? T.border : `${T.amber}22`, border: `1px solid ${T.amber}44`, borderRadius: "6px", color: rescheduling ? T.silver : T.amber, fontSize: "11px", cursor: rescheduling ? "default" : "pointer", fontFamily: "Inter, sans-serif" }}>
+              {rescheduling ? "Reagendando..." : "Reagendar"}
+            </button>
+          )}
+          {rescheduleMsg && <span style={{ fontSize: "11px", color: T.green }}>{rescheduleMsg}</span>}
         </div>
       </div>
 
