@@ -1,7 +1,7 @@
 // @ts-nocheck
 "use client";
-import { useState, useEffect, useRef, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useRef, useCallback, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 const T = {
@@ -51,7 +51,7 @@ const DEEP_QUESTIONS = [
   },
 ];
 
-export default function OnboardingPage() {
+function OnboardingContent() {
   const router = useRouter();
   const supabase = createClient();
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -62,7 +62,9 @@ export default function OnboardingPage() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const [dreamText, setDreamText] = useState("");
+  const searchParams = useSearchParams();
+  const initialDream = searchParams.get("dream") || "";
+  const [dreamText, setDreamText] = useState(initialDream);
   const [dreamReflection, setDreamReflection] = useState("");
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [qIdx, setQIdx] = useState(0);
@@ -87,8 +89,16 @@ export default function OnboardingPage() {
     });
   }, [scroll]);
 
+  // Auto-avançar se dream pré-preenchido
+  useEffect(() => {
+    if (initialDream) {
+      setTimeout(() => setStep("dream"), 100);
+    }
+  }, []);
+
   // Intro
   useEffect(() => {
+    if (initialDream) return; // skip intro se dream pré-preenchido
     addNorth(
       "Olá. Eu sou North.\n\nVou ajudar-te a transformar o teu sonho num plano real e completo — com objectivos concretos, tarefas específicas de 30 minutos e um calendário que funciona com a tua vida.\n\nNão tenho pressa. Começa.",
       900
@@ -428,5 +438,13 @@ export default function OnboardingPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function OnboardingPage() {
+  return (
+    <Suspense fallback={<div style={{ minHeight: "100vh", background: "#0D0D14" }} />}>
+      <OnboardingContent />
+    </Suspense>
   );
 }

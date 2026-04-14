@@ -18,8 +18,36 @@ export async function GET(request: Request) {
 
     if (dreamId) query = query.eq("dream_id", dreamId);
 
-    const { data } = await query;
-    return Response.json({ objectives: data || [] });
+    const { data: objectives } = await query;
+
+    // Incluir blocos sem objectivo como grupo "Geral"
+    if (dreamId) {
+      const { data: orphanBlocks } = await supabase
+        .from("blocks")
+        .select("id, title, status, scheduled_at, duration_minutes, is_critical, session_type, description, resource_url, resource_name")
+        .eq("dream_id", dreamId)
+        .eq("user_id", user.id)
+        .is("objective_id", null)
+        .order("scheduled_at", { ascending: true });
+
+      if (orphanBlocks && orphanBlocks.length > 0) {
+        const generalObj = {
+          id: "general",
+          dream_id: dreamId,
+          title: "Blocos Gerais",
+          description: "Tarefas não associadas a um objectivo macro específico",
+          why: null,
+          order_index: -1,
+          status: "active",
+          blocks: orphanBlocks,
+          blocks_count: orphanBlocks.length,
+          blocks_completed: orphanBlocks.filter((b: any) => b.status === "completed").length,
+        };
+        return Response.json({ objectives: [generalObj, ...(objectives || [])] });
+      }
+    }
+
+    return Response.json({ objectives: objectives || [] });
   } catch {
     return Response.json({ error: "Internal server error" }, { status: 500 });
   }
