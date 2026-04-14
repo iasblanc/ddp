@@ -181,6 +181,10 @@ function ObjectivesContent() {
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           <span style={{ fontSize: "11px", color: T.silver }}>{totalCompleted}/{totalBlocks} · {totalHours}h</span>
+          <button onClick={() => router.push(`/schedule?dreamId=${dreamId}`)}
+            style={{ padding: "6px 12px", background: `${T.green}22`, border: `1px solid ${T.green}44`, borderRadius: "6px", color: T.green, fontSize: "11px", cursor: "pointer", fontFamily: "Inter, sans-serif" }}>
+            Agenda
+          </button>
           <button onClick={() => router.push(`/timeline?dreamId=${dreamId}`)}
             style={{ padding: "6px 12px", background: "transparent", border: `1px solid ${T.border}`, borderRadius: "6px", color: T.silver, fontSize: "11px", cursor: "pointer", fontFamily: "Inter, sans-serif" }}>
             Timeline
