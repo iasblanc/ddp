@@ -26,6 +26,7 @@ function BlockContent() {
   const [postObstacle, setPostObstacle] = useState("");
   const [postStep, setPostStep] = useState(0);
   const [loading, setLoading]   = useState(true);
+  const [dreamId, setDreamId]   = useState<string | null>(null);
   const timerRef = useRef<any>(null);
 
   const scrollChat = () => setTimeout(() => chatBottomRef.current?.scrollIntoView({ behavior: "smooth" }), 60);
@@ -40,6 +41,7 @@ function BlockContent() {
     if (res.ok) {
       const { block } = await res.json();
       setBlock(block);
+      setDreamId(block.dream_id || null);
       setTimeLeft((block?.duration_minutes || 30) * 60);
       await loadPreBlock(block);
     }
@@ -184,9 +186,9 @@ function BlockContent() {
               style={{ width: "100%", padding: "15px", background: T.blue, border: "none", borderRadius: "12px", color: T.light, fontSize: "14px", fontWeight: 500, cursor: "pointer", fontFamily: "Inter, sans-serif", letterSpacing: "0.02em" }}>
               Começar bloco
             </button>
-            <button onClick={() => router.push("/dashboard")}
+            <button onClick={() => router.push(dreamId ? `/schedule?dreamId=${dreamId}` : "/dashboard")}
               style={{ width: "100%", marginTop: "8px", padding: "11px", background: "transparent", border: `1px solid ${T.border}`, borderRadius: "10px", color: T.silver, fontSize: "12px", cursor: "pointer", fontFamily: "Inter, sans-serif" }}>
-              Voltar
+              ← Voltar à Agenda
             </button>
           </div>
         )}
@@ -295,13 +297,13 @@ function BlockContent() {
               Mais um bloco real em direção ao seu sonho.
             </p>
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-              <button onClick={() => router.push(`/objectives?dreamId=${block?.dream_id}`)}
+              <button onClick={() => router.push(dreamId ? `/schedule?dreamId=${dreamId}` : "/dashboard")}
                 style={{ padding: "13px", background: T.blue, border: "none", borderRadius: "10px", color: T.light, fontSize: "13px", fontWeight: 500, cursor: "pointer", fontFamily: "Inter, sans-serif" }}>
-                Ver objetivos atualizados
+                ← Voltar à Agenda
               </button>
-              <button onClick={() => router.push("/dashboard")}
+              <button onClick={() => router.push(dreamId ? `/objectives?dreamId=${dreamId}` : "/dashboard")}
                 style={{ padding: "11px", background: "transparent", border: `1px solid ${T.border}`, borderRadius: "10px", color: T.silver, fontSize: "12px", cursor: "pointer", fontFamily: "Inter, sans-serif" }}>
-                Dashboard
+                Ver objetivos
               </button>
             </div>
           </div>

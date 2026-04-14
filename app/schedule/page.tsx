@@ -76,6 +76,16 @@ function ScheduleContent() {
   const dragBlock    = useRef<any>(null);
 
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+  const gridRef = useRef<HTMLDivElement>(null);
+
+  // Scroll para o horário de trabalho ao montar
+  useEffect(() => {
+    if (!gridRef.current) return;
+    const slotHeight = 72;
+    const targetSlot = startHour * 2; // cada hora = 2 slots
+    const headerOffset = 52 + 10; // header do dia + padding
+    gridRef.current.scrollTop = targetSlot * slotHeight - headerOffset;
+  }, [loading]);
 
   useEffect(() => { loadData(); }, [dreamId]);
 
@@ -119,18 +129,13 @@ function ScheduleContent() {
   }
 
   // ── Calcular slots de tempo disponíveis num dia ───────────────────────────
-  function getTimeSlots(startHour: number, blocksPerDay: number): Array<{h:number;m:number}> {
-    const slots = [];
-    for (let i = 0; i < Math.max(blocksPerDay, 8); i++) {
-      const totalMin = startHour * 60 + i * 30;
-      slots.push({ h: Math.floor(totalMin/60), m: totalMin%60 });
-    }
-    return slots;
-  }
-
-  const startHour  = parseStartHour(memory?.execution_profile?.best_time || "manhã");
-  const bpd        = parseDailyBlocks(memory?.execution_profile?.declared_times?.[0] || "1 hora");
-  const timeSlots  = getTimeSlots(startHour, bpd);
+  // 24h completas: 00:00 a 23:30 (48 slots de 30min)
+  const timeSlots = Array.from({ length: 48 }, (_, i) => ({
+    h: Math.floor(i / 2),
+    m: (i % 2) * 30,
+  }));
+  const startHour = parseStartHour(memory?.execution_profile?.best_time || "manhã");
+  const bpd       = parseDailyBlocks(memory?.execution_profile?.declared_times?.[0] || "1 hora");
 
   // ── Blocos agrupados ──────────────────────────────────────────────────────
   function blocksForSlot(dayKey: string, h: number, m: number): any[] {
@@ -284,21 +289,18 @@ function ScheduleContent() {
         </span>
       </div>
 
-      {/* Grade semanal — 7 colunas */}
-      <div style={{ overflowX:"auto" }}>
+      {/* Grade semanal — 7 colunas, scroll vertical para 24h */}
+      <div ref={gridRef} style={{ overflowX:"auto", overflowY:"auto", maxHeight:"calc(100vh - 120px)" }}>
         <div style={{ display:"grid", gridTemplateColumns:`60px repeat(7,1fr)`, minWidth:"900px", padding:"0 24px 32px" }}>
 
           {/* Coluna de horas */}
-          <div style={{ paddingTop:"52px" }}>
+          <div style={{ paddingTop:"52px", position:"sticky", left:0, background:T.bg, zIndex:20 }}>
             {timeSlots.map(({h,m},i) => (
               <div key={i} style={{ height:"72px", display:"flex", alignItems:"flex-start", paddingTop:"6px", paddingRight:"8px", justifyContent:"flex-end" }}>
                 <span style={{ fontSize:"11px", color:T.silver, fontFamily:"monospace" }}>{fmtTime(h,m)}</span>
               </div>
             ))}
-            {/* Slot extra para blocos fora da janela */}
-            <div style={{ height:"40px", display:"flex", alignItems:"center", paddingRight:"8px", justifyContent:"flex-end" }}>
-              <span style={{ fontSize:"10px", color:T.border }}>outro</span>
-            </div>
+
           </div>
 
           {/* Colunas dos dias */}
@@ -311,8 +313,8 @@ function ScheduleContent() {
             return (
               <div key={dayIdx} style={{ borderLeft:`1px solid ${T.border}22`, background: today ? `${T.blue}04` : "transparent" }}>
 
-                {/* Cabeçalho do dia */}
-                <div style={{ padding:"10px 6px 8px", textAlign:"center", borderBottom:`1px solid ${T.border}22`, minHeight:"48px" }}>
+                {/* Cabeçalho do dia — sticky */}
+                <div style={{ padding:"10px 6px 8px", textAlign:"center", borderBottom:`1px solid ${T.border}22`, minHeight:"48px", position:"sticky", top:0, background: today ? `${T.card}` : T.bg, zIndex:10 }}>
                   <p style={{ margin:"0 0 2px", fontSize:"11px", color: today ? T.blue : weekend ? T.silver+"88" : T.silver, fontWeight: today ? 700 : 400, textTransform:"uppercase", letterSpacing:"0.06em" }}>
                     {DAYS_PT[day.getDay()]}
                   </p>
@@ -342,6 +344,8 @@ function ScheduleContent() {
                           ? `${T.blue}20`
                           : isDraggingAny && slotBlocks.length === 0
                           ? `${T.blue}04`
+                          : (h >= startHour && h < startHour + Math.ceil(bpd / 2) && !weekend)
+                          ? `${T.blue}03`
                           : "transparent",
                         transition:"background 100ms ease",
                         position:"relative",
@@ -372,25 +376,7 @@ function ScheduleContent() {
                   );
                 })}
 
-                {/* Slot "outro" — blocos fora da janela principal */}
-                {(() => {
-                  const outOfWindow = dayBlocksAll.filter(b => {
-                    const {h,m} = localHourMin(b.scheduled_at);
-                    return !timeSlots.find(s => s.h === h && s.m === m);
-                  });
-                  if (!outOfWindow.length) return (
-                    <div style={{ height:"40px", borderBottom:`1px solid ${T.border}14` }} />
-                  );
-                  return (
-                    <div style={{ height:"40px", padding:"3px 4px", borderBottom:`1px solid ${T.border}14`, overflow:"hidden" }}>
-                      {outOfWindow.slice(0,2).map(block => (
-                        <div key={block.id} style={{ fontSize:"9px", color:T.silver, padding:"1px 4px", background:T.surface, borderRadius:"3px", marginBottom:"2px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                          {fmtTime(localHourMin(block.scheduled_at).h, localHourMin(block.scheduled_at).m)} {block.title}
-                        </div>
-                      ))}
-                    </div>
-                  );
-                })()}
+  
               </div>
             );
           })}
