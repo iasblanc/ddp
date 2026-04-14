@@ -105,14 +105,15 @@ function ObjectivesContent() {
         body: JSON.stringify({ ...answers, weeks: 6, blocksPerWeek: 3 }),
       });
       const data = res.ok ? await res.json() : null;
-      if (data && data.count > 0) {
+      if (!res.ok) {
+        setGenerateError(`Erro do servidor (${res.status}). Tenta novamente.`);
+      } else if (data?.count > 0) {
         await loadData();
-      } else if (data?.error === "parse_failed") {
-        setGenerateError("North não conseguiu gerar as tarefas desta vez. Tenta novamente.");
-      } else if (!res.ok) {
-        setGenerateError("Erro ao gerar tarefas. Verifica a conexão e tenta novamente.");
+      } else if (data?.error === "parse_failed" || data?.error === "empty_result") {
+        setGenerateError("North não conseguiu formatar as tarefas. Tenta novamente em alguns segundos.");
+      } else if (data?.count === 0) {
+        setGenerateError("Nenhuma tarefa foi gerada. Tenta novamente.");
       } else {
-        // count == 0 ou parse_failed silencioso — recarregar mesmo assim
         await loadData();
       }
     } catch {
