@@ -15,6 +15,7 @@ export async function POST(request: Request) {
 
     const {
       dreamId, dreamTitle, dreamReflection,
+      exploreContext,
       deadline, dailyTime, bestTime, currentLevel,
       mainObstacle, constraints, successMetric,
     } = await request.json();
@@ -24,6 +25,7 @@ export async function POST(request: Request) {
 USER CONTEXT:
 - Dream: "${dreamTitle}"
 - Deeper meaning: "${dreamReflection || "wants to build something real"}"
+- Exploration insights: "${exploreContext || "not available"}"
 - Timeline: ${deadline || "not specified"}
 - Daily time available: ${dailyTime || "not specified"}
 - Best time of day: ${bestTime || "morning"}
