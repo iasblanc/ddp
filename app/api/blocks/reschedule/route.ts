@@ -53,9 +53,13 @@ export async function POST(request: Request) {
     const bpd       = parseDailyBlocks(dailyTime);
     const startHour = parseStartHour(bestTime);
 
-    // Começar amanhã
-    let cursor = new Date();
-    cursor.setHours(0,0,0,0);
+    const TZ_OFFSET = 3; // São Paulo = UTC-3
+    const startHourUTC = startHour + TZ_OFFSET;
+
+    // Começar amanhã em horário local São Paulo
+    const nowLocal = new Date(Date.now() - TZ_OFFSET * 3600000);
+    nowLocal.setHours(0,0,0,0);
+    let cursor = new Date(nowLocal);
     cursor.setDate(cursor.getDate() + 1);
     cursor = advanceToWorkDay(cursor);
 
@@ -73,9 +77,11 @@ export async function POST(request: Request) {
         used = dayOccupancy.get(dayKey) || 0;
       }
 
-      const totalMin = startHour * 60 + used * 30;
-      const slot = new Date(cursor);
-      slot.setHours(Math.floor(totalMin/60), totalMin%60, 0, 0);
+      const totalMin = startHourUTC * 60 + used * 30;
+      const slotLocal = new Date(cursor);
+      slotLocal.setHours(Math.floor(totalMin/60), totalMin%60, 0, 0);
+      // Converter para UTC correcto
+      const slot = new Date(slotLocal.getTime() + TZ_OFFSET * 3600000);
 
       updates.push({ id: block.id, scheduled_at: slot.toISOString() });
       dayOccupancy.set(dayKey, used + 1);

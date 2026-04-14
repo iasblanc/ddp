@@ -160,6 +160,10 @@ function advanceToWorkDay(d: Date, workDays: number[]): Date {
 //      num dia onde ainda não há blocos de outros objectivos
 //   3. Slots dentro do dia: startHour, startHour+0:30, startHour+1:00, ...
 // ─────────────────────────────────────────────────────────────────────────────
+// Offset UTC→São Paulo: São Paulo = UTC-3
+// Se o utilizador quer "manhã 7h" local, guardamos 10h UTC
+const SAO_PAULO_OFFSET_HOURS = 3;
+
 function scheduleBlocks({
   taskDefs, userId, objectiveId, dreamId,
   bestTime, dailyTime, blocksPerWeek,
@@ -171,21 +175,34 @@ function scheduleBlocks({
   dayOccupancy: Map<string, number>,
 }) {
   const blocksPerDay = parseDailyBlocks(dailyTime);
-  const startHour   = parseStartHour(bestTime);
-  const workDays    = parseWorkDays(blocksPerWeek);
+  // startHour em horário local São Paulo — guardar em UTC (+3)
+  const startHourLocal = parseStartHour(bestTime);
+  const startHourUTC   = startHourLocal + SAO_PAULO_OFFSET_HOURS;
+  const workDays       = parseWorkDays(blocksPerWeek);
 
-  // Ponto de partida: dia seguinte ao último bloco (ou amanhã)
-  let cursorDay = new Date();
-  cursorDay.setHours(0, 0, 0, 0);
+  // Hoje em São Paulo (UTC-3)
+  const nowUTC = new Date();
+  const nowLocal = new Date(nowUTC.getTime() - SAO_PAULO_OFFSET_HOURS * 3600000);
+  nowLocal.setHours(0, 0, 0, 0);
+
+  let cursorDay = new Date(nowLocal);
 
   if (lastOccupiedSlot) {
-    cursorDay = new Date(lastOccupiedSlot);
-    cursorDay.setHours(0, 0, 0, 0);
-    const lastDayKey = cursorDay.toISOString().slice(0, 10);
-    const usedInLastDay = dayOccupancy.get(lastDayKey) || 0;
-    // Se o último dia ainda tem capacidade E não tem blocos de outros objectivos,
-    // pode continuar nele. Caso contrário, avança para o próximo dia.
-    if (usedInLastDay >= blocksPerDay) {
+    // Usar o lastOccupiedSlot só se for no futuro
+    const lastLocal = new Date(new Date(lastOccupiedSlot).getTime() - SAO_PAULO_OFFSET_HOURS * 3600000);
+    lastLocal.setHours(0, 0, 0, 0);
+    if (lastLocal > nowLocal) {
+      // Último bloco é futuro — pode aproveitar o dia se ainda tem capacidade
+      const lastDayKey = lastLocal.toISOString().slice(0, 10);
+      const usedInLastDay = dayOccupancy.get(lastDayKey) || 0;
+      if (usedInLastDay >= blocksPerDay) {
+        cursorDay = new Date(lastLocal);
+        cursorDay.setDate(cursorDay.getDate() + 1);
+      } else {
+        cursorDay = new Date(lastLocal);
+      }
+    } else {
+      // Último bloco é passado — começar amanhã
       cursorDay.setDate(cursorDay.getDate() + 1);
     }
   } else {
@@ -211,14 +228,17 @@ function scheduleBlocks({
     const finalDayKey = cursorDay.toISOString().slice(0, 10);
     const finalUsedToday = dayOccupancy.get(finalDayKey) || 0;
 
-    // Calcular hora do slot: startHour + (slot_index_within_day * 30min)
+    // Calcular hora do slot em UTC (local + offset)
     const slotIndex = finalUsedToday;
-    const totalMinutes = startHour * 60 + slotIndex * 30;
-    const slotHour = Math.floor(totalMinutes / 60);
-    const slotMin  = totalMinutes % 60;
+    const totalMinutesUTC = startHourUTC * 60 + slotIndex * 30;
+    const slotHourUTC = Math.floor(totalMinutesUTC / 60);
+    const slotMinUTC  = totalMinutesUTC % 60;
 
-    const slotDate = new Date(cursorDay);
-    slotDate.setHours(slotHour, slotMin, 0, 0);
+    // cursorDay está em horário local — converter para UTC para guardar
+    const slotDateLocal = new Date(cursorDay);
+    slotDateLocal.setHours(slotHourUTC, slotMinUTC, 0, 0);
+    // Corrigir: adicionar o offset para que o ISO string seja UTC correcto
+    const slotDate = new Date(slotDateLocal.getTime() + SAO_PAULO_OFFSET_HOURS * 3600000);
 
     // Registar este slot como ocupado para os próximos blocos desta chamada
     dayOccupancy.set(finalDayKey, finalUsedToday + 1);
