@@ -61,8 +61,21 @@ Language: Portuguese (pt-BR). Be specific to the dream context.`;
       messages: [{ role: "user", content: prompt }],
     });
 
-    const text = response.content[0].type === "text" ? response.content[0].text.trim() : "[]";
-    const objectives = JSON.parse(text.replace(/```json|```/g, "").trim());
+    const rawText = response.content[0].type === "text" ? response.content[0].text : "[]";
+    let objectives: any[] = [];
+    try {
+      const start = rawText.indexOf("[");
+      const end   = rawText.lastIndexOf("]");
+      if (start !== -1 && end !== -1 && end > start) {
+        objectives = JSON.parse(rawText.slice(start, end + 1));
+      } else {
+        objectives = JSON.parse(rawText.replace(/```json|```/g, "").trim());
+      }
+    } catch (parseErr) {
+      console.error("Extract objectives parse error:", (parseErr as any)?.message);
+      console.error("Raw (first 500):", rawText.slice(0, 500));
+      return Response.json({ error: "parse_failed", objectives: [] }, { status: 200 });
+    }
 
     const rows = objectives.map((obj: any, idx: number) => ({
       dream_id: dreamId,

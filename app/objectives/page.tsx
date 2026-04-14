@@ -94,13 +94,30 @@ function ObjectivesContent() {
     setGeneratingObjectives(false);
   }
 
+  const [generateError, setGenerateError] = useState<string | null>(null);
+
   async function generateBlocks(objId: string) {
     setGenerating(objId);
-    const res = await fetch(`/api/objectives/${objId}`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...answers, weeks: 6, blocksPerWeek: 3 }),
-    });
-    if (res.ok) await loadData();
+    setGenerateError(null);
+    try {
+      const res = await fetch(`/api/objectives/${objId}`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...answers, weeks: 6, blocksPerWeek: 3 }),
+      });
+      const data = res.ok ? await res.json() : null;
+      if (data && data.count > 0) {
+        await loadData();
+      } else if (data?.error === "parse_failed") {
+        setGenerateError("North não conseguiu gerar as tarefas desta vez. Tenta novamente.");
+      } else if (!res.ok) {
+        setGenerateError("Erro ao gerar tarefas. Verifica a conexão e tenta novamente.");
+      } else {
+        // count == 0 ou parse_failed silencioso — recarregar mesmo assim
+        await loadData();
+      }
+    } catch {
+      setGenerateError("Erro de conexão. Tenta novamente.");
+    }
     setGenerating(null);
   }
 
@@ -240,6 +257,9 @@ function ObjectivesContent() {
                             style={{ padding: "8px 18px", background: generating === obj.id ? T.border : `${T.blue}22`, border: `1px solid ${T.blue}44`, borderRadius: "7px", color: T.blue, fontSize: "12px", cursor: generating ? "default" : "pointer", fontFamily: "Inter, sans-serif", fontWeight: 500 }}>
                             {generating === obj.id ? "Gerando com North..." : "Gerar tarefas de 30min →"}
                           </button>
+                          {generateError && generating !== obj.id && (
+                            <p style={{ margin: "8px 0 0", fontSize: "11px", color: "#C9853A", lineHeight: 1.4 }}>{generateError}</p>
+                          )}
                         </div>
                       ) : (
                         <>

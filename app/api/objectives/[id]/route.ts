@@ -75,8 +75,23 @@ Language: Portuguese (pt-BR). Be extremely specific. Include real URLs where rel
       messages: [{ role: "user", content: prompt }],
     });
 
-    const text = response.content[0].type === "text" ? response.content[0].text.trim() : "[]";
-    const blockDefs = JSON.parse(text.replace(/```json|```/g, "").trim());
+    const rawText = response.content[0].type === "text" ? response.content[0].text : "[]";
+    // Extrair o array JSON de forma robusta — Claude por vezes adiciona texto antes/depois
+    let blockDefs: any[] = [];
+    try {
+      const start = rawText.indexOf("[");
+      const end   = rawText.lastIndexOf("]");
+      if (start !== -1 && end !== -1 && end > start) {
+        blockDefs = JSON.parse(rawText.slice(start, end + 1));
+      } else {
+        const clean = rawText.replace(/```json|```/g, "").trim();
+        blockDefs = JSON.parse(clean);
+      }
+    } catch (parseErr) {
+      console.error("Generate blocks JSON parse error:", (parseErr as any)?.message);
+      console.error("Raw response (first 500 chars):", rawText.slice(0, 500));
+      return Response.json({ error: "parse_failed", blocks: [], count: 0 }, { status: 200 });
+    }
 
     const blocks = generateScheduledBlocks(
       blockDefs, params.id, objective.dream_id, user.id, bestTime
