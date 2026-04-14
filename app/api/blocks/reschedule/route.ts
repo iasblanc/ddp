@@ -2,7 +2,6 @@
 export const dynamic = "force-dynamic";
 import { createClient } from "@/lib/supabase/server";
 
-// POST /api/blocks/reschedule — redistribuir todos os blocos do usuário sem sobreposição
 export async function POST(request: Request) {
   try {
     const supabase = createClient();
@@ -11,43 +10,27 @@ export async function POST(request: Request) {
 
     const { dreamId, bestTime = "manhã", dailyTime = "1 hora", blocksPerWeek = 3 } = await request.json();
 
-    // Buscar todos os blocos agendados (não concluídos) deste sonho, ordenados por phase/week e order
     const { data: blocks } = await supabase
       .from("blocks")
-      .select("id, title, objective_id, phase_number, week_number, scheduled_at")
+      .select("id, title, objective_id, phase_number")
       .eq("dream_id", dreamId)
       .eq("user_id", user.id)
       .in("status", ["scheduled", "active"])
       .order("objective_id", { ascending: true })
-      .order("phase_number", { ascending: true });
+      .order("phase_number",  { ascending: true });
 
     if (!blocks?.length) return Response.json({ rescheduled: 0 });
 
-    const timeMap: Record<string, number> = {
-      "manhã": 9, "manha": 9, morning: 9,
-      "meio-dia": 12, afternoon: 14, tarde: 15,
-      noite: 20, evening: 19, night: 20,
-    };
-    const hour = timeMap[bestTime?.toLowerCase().trim()] ?? 9;
-
-    const workDaysByFreq: Record<number, number[]> = {
-      1: [1], 2: [1, 4], 3: [1, 3, 5],
-      4: [1, 2, 4, 5], 5: [1, 2, 3, 4, 5],
-    };
-    const freq = Math.min(5, Math.max(1, Number(blocksPerWeek)));
-    const workDays = workDaysByFreq[freq] ?? [1, 3, 5];
-
-    // Parsear blocos por dia com base no tempo disponível
+    // ── Utilitários ───────────────────────────────────────────────────────────
     function parseDailyBlocks(t: string): number {
-      if (!t) return 1;
       const s = t.toLowerCase();
       const hMatch = s.match(/(\d+(?:[.,]\d+)?)\s*h/);
-      if (hMatch) return Math.max(1, Math.floor(parseFloat(hMatch[1].replace(",",".")) * 2));
+      if (hMatch) return Math.min(4, Math.max(1, Math.floor(parseFloat(hMatch[1].replace(",",".")) * 2)));
       const mMatch = s.match(/(\d+)\s*min/);
-      if (mMatch) return Math.max(1, Math.floor(parseInt(mMatch[1]) / 30));
+      if (mMatch) return Math.min(4, Math.max(1, Math.floor(parseInt(mMatch[1]) / 30)));
       if (s.includes("1 hora") || s.includes("uma hora")) return 2;
       if (s.includes("2 horas") || s.includes("duas horas")) return 4;
-      return 1;
+      return 2;
     }
     function parseStartHour(t: string): number {
       const s = (t||"").toLowerCase();
@@ -57,44 +40,47 @@ export async function POST(request: Request) {
       const m = s.match(/(\d{1,2})(?:h|:)/);
       return m ? parseInt(m[1]) : 9;
     }
+    const workDaysByFreq: Record<number, number[]> = {
+      1:[1], 2:[1,4], 3:[1,3,5], 4:[1,2,4,5], 5:[1,2,3,4,5]
+    };
+    const workDays = workDaysByFreq[Math.min(5, Math.max(1, Number(blocksPerWeek)))] ?? [1,3,5];
+    function advanceToWorkDay(d: Date): Date {
+      const r = new Date(d); let i = 0;
+      while (!workDays.includes(r.getDay()) && i++<14) r.setDate(r.getDate()+1);
+      return r;
+    }
 
-    const blocksPerDayCount = parseDailyBlocks(dailyTime);
+    const bpd       = parseDailyBlocks(dailyTime);
     const startHour = parseStartHour(bestTime);
 
     // Começar amanhã
     let cursor = new Date();
-    cursor.setHours(0, 0, 0, 0);
+    cursor.setHours(0,0,0,0);
     cursor.setDate(cursor.getDate() + 1);
-
-    function advanceToWorkDay(d: Date): Date {
-      const r = new Date(d);
-      let i = 0;
-      while (!workDays.includes(r.getDay()) && i++ < 14) r.setDate(r.getDate() + 1);
-      return r;
-    }
     cursor = advanceToWorkDay(cursor);
 
-    // Redistribuir blocos — múltiplos por dia dentro da janela
+    const dayOccupancy = new Map<string, number>();
     const updates: Array<{ id: string; scheduled_at: string }> = [];
-    let slotsUsedToday = 0;
-    let cursorDayKey = cursor.toISOString().slice(0, 10);
 
     for (const block of blocks) {
-      if (slotsUsedToday >= blocksPerDayCount) {
+      let dayKey = cursor.toISOString().slice(0,10);
+      let used = dayOccupancy.get(dayKey) || 0;
+
+      if (used >= bpd) {
         cursor.setDate(cursor.getDate() + 1);
         cursor = advanceToWorkDay(cursor);
-        cursorDayKey = cursor.toISOString().slice(0, 10);
-        slotsUsedToday = 0;
+        dayKey = cursor.toISOString().slice(0,10);
+        used = dayOccupancy.get(dayKey) || 0;
       }
-      const blockHour = startHour + Math.floor(slotsUsedToday * 0.5);
-      const blockMin = (slotsUsedToday % 2 === 0) ? 0 : 30;
+
+      const totalMin = startHour * 60 + used * 30;
       const slot = new Date(cursor);
-      slot.setHours(blockHour, blockMin, 0, 0);
+      slot.setHours(Math.floor(totalMin/60), totalMin%60, 0, 0);
+
       updates.push({ id: block.id, scheduled_at: slot.toISOString() });
-      slotsUsedToday++;
+      dayOccupancy.set(dayKey, used + 1);
     }
 
-    // Actualizar em batch
     let rescheduled = 0;
     for (const upd of updates) {
       const { error } = await supabase.from("blocks")
@@ -103,9 +89,7 @@ export async function POST(request: Request) {
       if (!error) rescheduled++;
     }
 
-    // Sincronizar com Calendar
     syncRescheduled(supabase, user.id, updates).catch(console.error);
-
     return Response.json({ rescheduled, total: blocks.length });
   } catch (error: any) {
     console.error("Reschedule error:", error?.message);
@@ -115,30 +99,24 @@ export async function POST(request: Request) {
 
 async function syncRescheduled(supabase: any, userId: string, updates: any[]) {
   const { data: integration } = await supabase
-    .from("calendar_integrations")
-    .select("access_token")
+    .from("calendar_integrations").select("access_token")
     .eq("user_id", userId).eq("is_active", true).single();
   if (!integration?.access_token) return;
 
   for (const upd of updates) {
     const { data: block } = await supabase.from("blocks")
-      .select("calendar_event_id, title, description, duration_minutes")
-      .eq("id", upd.id).single();
+      .select("calendar_event_id, duration_minutes").eq("id", upd.id).single();
     if (!block?.calendar_event_id) continue;
-
     const start = new Date(upd.scheduled_at);
-    const end = new Date(start.getTime() + (block.duration_minutes || 30) * 60000);
+    const end   = new Date(start.getTime() + (block.duration_minutes||30) * 60000);
     await fetch(
       `https://www.googleapis.com/calendar/v3/calendars/primary/events/${block.calendar_event_id}`,
       {
         method: "PATCH",
-        headers: {
-          Authorization: `Bearer ${integration.access_token}`,
-          "Content-Type": "application/json",
-        },
+        headers: { Authorization: `Bearer ${integration.access_token}`, "Content-Type": "application/json" },
         body: JSON.stringify({
           start: { dateTime: start.toISOString(), timeZone: "America/Sao_Paulo" },
-          end: { dateTime: end.toISOString(), timeZone: "America/Sao_Paulo" },
+          end:   { dateTime: end.toISOString(),   timeZone: "America/Sao_Paulo" },
         }),
       }
     ).catch(console.error);
