@@ -29,7 +29,7 @@ function BlockContent() {
   const [loading,   setLoading]   = useState(true);
 
   // Timer — integrado no mesmo painel, não substitui a tela
-  const [timerState,  setTimerState]  = useState<"idle"|"running"|"done">("idle");
+  const [timerState,  setTimerState]  = useState<"idle"|"running"|"paused"|"done">("idle");
   const [timeLeft,    setTimeLeft]    = useState(0);
   const [totalTime,   setTotalTime]   = useState(0);
   const [checkedSteps, setCheckedSteps] = useState<boolean[]>([]);
@@ -74,6 +74,26 @@ function BlockContent() {
     if (timerState!=="idle") return;
     setTimerState("running");
     fetch(`/api/blocks/${blockId}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({status:"active"})});
+    timerRef.current = setInterval(()=>{
+      setTimeLeft(prev=>{
+        if (prev<=1) {
+          clearInterval(timerRef.current);
+          setTimerState("done");
+          setPostStep(1);
+          return 0;
+        }
+        return prev-1;
+      });
+    },1000);
+  }
+
+  function pauseTimer() {
+    clearInterval(timerRef.current);
+    setTimerState("paused");
+  }
+
+  function resumeTimer() {
+    setTimerState("running");
     timerRef.current = setInterval(()=>{
       setTimeLeft(prev=>{
         if (prev<=1) {
@@ -266,6 +286,31 @@ function BlockContent() {
                 ▶ Iniciar bloco — {block?.duration_minutes||30} min
               </button>
             </div>
+          ) : timerState==="paused" ? (
+            // Timer pausado
+            <div style={{padding:"12px 20px",borderBottom:`1px solid ${T.border}`,background:`${T.amber}08`,flexShrink:0}}>
+              <div style={{display:"flex",alignItems:"center",gap:"14px",marginBottom:"8px"}}>
+                <p style={{fontFamily:"monospace",fontSize:"36px",fontWeight:300,margin:0,color:T.amber,letterSpacing:"0.04em",lineHeight:1}}>
+                  {fmtTime(timeLeft)}
+                </p>
+                <div style={{flex:1}}>
+                  <div style={{height:"4px",background:`${T.border}`,borderRadius:"999px",overflow:"hidden"}}>
+                    <div style={{height:"100%",width:`${progress}%`,background:T.amber,borderRadius:"999px"}} />
+                  </div>
+                  <p style={{margin:"4px 0 0",fontSize:"10px",color:T.amber}}>⏸ Em pausa · {Math.round(progress)}% concluído</p>
+                </div>
+                <div style={{display:"flex",gap:"6px",flexShrink:0}}>
+                  <button onClick={resumeTimer}
+                    style={{padding:"6px 12px",background:T.blue,border:"none",borderRadius:"7px",color:T.light,fontSize:"11px",fontWeight:600,cursor:"pointer",fontFamily:"Inter,sans-serif"}}>
+                    ▶ Retomar
+                  </button>
+                  <button onClick={stopTimer}
+                    style={{padding:"6px 12px",background:"transparent",border:`1px solid ${T.border}`,borderRadius:"7px",color:T.silver,fontSize:"11px",cursor:"pointer",fontFamily:"Inter,sans-serif"}}>
+                    Terminar
+                  </button>
+                </div>
+              </div>
+            </div>
           ) : timerState==="running" ? (
             // Timer activo — compacto, sempre visível
             <div style={{padding:"12px 20px",borderBottom:`1px solid ${T.border}`,background:T.surface,flexShrink:0}}>
@@ -280,10 +325,16 @@ function BlockContent() {
                   </div>
                   <p style={{margin:"4px 0 0",fontSize:"10px",color:T.silver}}>{Math.round(progress)}% concluído</p>
                 </div>
-                <button onClick={stopTimer}
-                  style={{padding:"6px 12px",background:"transparent",border:`1px solid ${T.border}`,borderRadius:"7px",color:T.silver,fontSize:"11px",cursor:"pointer",fontFamily:"Inter,sans-serif",flexShrink:0}}>
-                  Terminar
-                </button>
+                <div style={{display:"flex",gap:"6px",flexShrink:0}}>
+                  <button onClick={pauseTimer}
+                    style={{padding:"6px 12px",background:`${T.amber}18`,border:`1px solid ${T.amber}44`,borderRadius:"7px",color:T.amber,fontSize:"11px",fontWeight:500,cursor:"pointer",fontFamily:"Inter,sans-serif"}}>
+                    ⏸ Pausar
+                  </button>
+                  <button onClick={stopTimer}
+                    style={{padding:"6px 12px",background:"transparent",border:`1px solid ${T.border}`,borderRadius:"7px",color:T.silver,fontSize:"11px",cursor:"pointer",fontFamily:"Inter,sans-serif"}}>
+                    Terminar
+                  </button>
+                </div>
               </div>
               {/* Passos restantes */}
               <p style={{margin:0,fontSize:"10px",color:T.silver}}>

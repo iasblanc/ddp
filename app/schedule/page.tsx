@@ -451,13 +451,23 @@ function TaskCard({ block, isDragging, isSaving, onDragStart, onDragEnd, onClick
         overflow: "hidden",
       }}>
 
-      {/* Linha superior: tipo + status */}
-      <div style={{ display:"flex", alignItems:"center", gap:"3px", marginBottom:"1px" }}>
-        <span style={{ fontSize:"8px", color:sessColor, background:`${sessColor}18`, padding:"0 4px", borderRadius:"2px", flexShrink:0 }}>
-          {SESSION_LABEL[block.session_type]?.[0] || "T"}
-        </span>
-        {done && <span style={{ fontSize:"8px", color:T.green }}>✓</span>}
-        {isSaving && <span style={{ fontSize:"8px", color:T.amber }}>⟳</span>}
+      {/* Status badge no topo */}
+      <div style={{ display:"flex", alignItems:"center", gap:"3px", marginBottom:"2px" }}>
+        {block.status === "completed" && (
+          <span style={{ fontSize:"8px", fontWeight:700, color:T.green, background:`${T.green}22`, padding:"0px 5px", borderRadius:"3px", letterSpacing:"0.04em" }}>✓ FEITO</span>
+        )}
+        {block.status === "active" && (
+          <span style={{ fontSize:"8px", fontWeight:700, color:T.amber, background:`${T.amber}22`, padding:"0px 5px", borderRadius:"3px", letterSpacing:"0.04em" }}>▶ EM CURSO</span>
+        )}
+        {block.status === "scheduled" && (
+          <span style={{ fontSize:"8px", color:T.silver, background:`${T.silver}18`, padding:"0px 5px", borderRadius:"3px" }}>
+            {SESSION_LABEL[block.session_type]?.[0] || "T"}
+          </span>
+        )}
+        {(block.status === "missed" || block.status === "skipped") && (
+          <span style={{ fontSize:"8px", color:T.silver, background:`${T.silver}11`, padding:"0px 5px", borderRadius:"3px", letterSpacing:"0.04em" }}>✗ PERDIDO</span>
+        )}
+        {isSaving && <span style={{ fontSize:"8px", color:T.amber, marginLeft:"2px" }}>⟳</span>}
         {canDrag && !isDragging && (
           <span style={{ fontSize:"9px", color:T.border, marginLeft:"auto" }}>⠿</span>
         )}

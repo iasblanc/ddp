@@ -103,7 +103,7 @@ function DashboardContent() {
       if (active) {
         setActiveDream(active);
         const [blocksRes, objRes, wRes] = await Promise.all([
-          fetch(`/api/blocks?dreamId=${active.id}&days=365`),
+          fetch(`/api/blocks?dreamId=${active.id}&includeAll=true`),
           fetch(`/api/objectives?dreamId=${active.id}`),
           fetch(`/api/witnesses?dreamId=${active.id}`),
         ]);
