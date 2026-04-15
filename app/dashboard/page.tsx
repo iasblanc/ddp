@@ -300,31 +300,36 @@ function DashboardContent() {
 
           {activeDream ? (<>
 
-            {/* Hero do sonho */}
-            <div style={{padding:"20px 18px 16px",borderBottom:`1px solid ${T.border}`}}>
-              <p style={{margin:"0 0 4px",fontSize:"9px",color:T.silver,textTransform:"uppercase",letterSpacing:"0.1em"}}>Sonho ativo · dia {daysActive+1}</p>
-              <p onClick={()=>router.push(`/objectives?dreamId=${activeDream.id}`)}
-                style={{margin:"0 0 14px",fontFamily:"'Playfair Display',serif",fontSize:"14px",lineHeight:1.4,color:T.light,cursor:"pointer"}}>
+            {/* ── CARD DO SONHO ATIVO ── clicável → Agenda ─────────────────── */}
+            <div
+              onClick={()=>router.push(`/schedule?dreamId=${activeDream.id}`)}
+              style={{padding:"18px 18px 14px",borderBottom:`1px solid ${T.border}`,cursor:"pointer",position:"relative",overflow:"hidden",transition:"background 180ms ease"}}
+              onMouseEnter={e=>e.currentTarget.style.background=`${T.blue}07`}
+              onMouseLeave={e=>e.currentTarget.style.background="transparent"}
+            >
+              {/* Linha de acento */}
+              <div style={{position:"absolute",top:0,left:0,right:0,height:"2px",background:`linear-gradient(90deg,${T.blue}00,${T.blue}88,${T.blue}00)`}} />
+
+              <p style={{margin:"0 0 2px",fontSize:"9px",color:T.silver,textTransform:"uppercase",letterSpacing:"0.1em"}}>Sonho ativo · dia {daysActive+1}</p>
+              <p style={{margin:"0 0 14px",fontFamily:"'Playfair Display',serif",fontSize:"14px",lineHeight:1.4,color:T.light}}>
                 {activeDream.title}
               </p>
 
-              {/* Progresso circular + horas */}
+              {/* Progresso circular + métricas */}
               <div style={{display:"flex",alignItems:"center",gap:"14px",marginBottom:"12px"}}>
                 <div style={{position:"relative",flexShrink:0}}>
-                  <CircleProgress pct={pct} size={68} stroke={5} color={pct>0?T.blue:T.dim} />
+                  <CircleProgress pct={pct} size={64} stroke={5} color={pct>0?T.blue:T.dim} />
                   <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
-                    <span style={{fontSize:"13px",fontWeight:700,color:pct>0?T.blue:T.silver,fontFamily:"monospace"}}>{pct}%</span>
+                    <span style={{fontSize:"12px",fontWeight:700,color:pct>0?T.blue:T.silver,fontFamily:"monospace"}}>{pct}%</span>
                   </div>
                 </div>
                 <div style={{flex:1}}>
-                  <div style={{marginBottom:"8px"}}>
-                    <p style={{margin:"0 0 1px",fontSize:"22px",fontWeight:700,color:T.light,fontFamily:"monospace",lineHeight:1}}>{invested}<span style={{fontSize:"12px",fontWeight:400,color:T.silver}}> h</span></p>
-                    <p style={{margin:0,fontSize:"10px",color:T.silver}}>horas investidas</p>
-                  </div>
-                  <div>
-                    <p style={{margin:"0 0 1px",fontSize:"16px",fontWeight:600,color:streak>0?T.amber:T.silver,fontFamily:"monospace",lineHeight:1}}>{streak}<span style={{fontSize:"10px",fontWeight:400,color:T.silver}}> dias</span></p>
-                    <p style={{margin:0,fontSize:"10px",color:T.silver}}>sequência atual</p>
-                  </div>
+                  <p style={{margin:"0 0 1px",fontSize:"20px",fontWeight:700,color:T.light,fontFamily:"monospace",lineHeight:1}}>{invested}<span style={{fontSize:"11px",fontWeight:400,color:T.silver}}> h</span></p>
+                  <p style={{margin:"0 0 6px",fontSize:"10px",color:T.silver}}>horas investidas</p>
+                  {streak>0 && <>
+                    <p style={{margin:"0 0 1px",fontSize:"15px",fontWeight:600,color:T.amber,fontFamily:"monospace",lineHeight:1}}>{streak}<span style={{fontSize:"10px",fontWeight:400,color:T.silver}}> dias 🔥</span></p>
+                    <p style={{margin:0,fontSize:"10px",color:T.silver}}>sequência</p>
+                  </>}
                 </div>
               </div>
 
@@ -332,18 +337,25 @@ function DashboardContent() {
               <div style={{height:"3px",background:T.dim,borderRadius:"999px",marginBottom:"6px"}}>
                 <div style={{height:"100%",width:`${pct}%`,background:`linear-gradient(90deg,${T.blue},#5580BA)`,borderRadius:"999px",transition:"width 600ms ease"}} />
               </div>
-              <p style={{margin:0,fontSize:"10px",color:T.silver}}>{blocksDone} de {blocksTotal} blocos concluídos</p>
+              <p style={{margin:"0 0 12px",fontSize:"10px",color:T.silver}}>{blocksDone} de {blocksTotal} blocos · clique para ver agenda</p>
+
+              {/* Botão Progresso — não propaga o clique do card */}
+              <button
+                onClick={e=>{e.stopPropagation();router.push(`/progress?dreamId=${activeDream.id}`)}}
+                style={{width:"100%",padding:"7px 10px",background:`${T.green}18`,border:`1px solid ${T.green}44`,borderRadius:"8px",color:T.green,fontSize:"11px",fontWeight:500,cursor:"pointer",fontFamily:"Inter,sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:"6px"}}>
+                <span>📈</span> Ver evolução da jornada
+              </button>
             </div>
 
-            {/* Stats da semana */}
+            {/* ── STATS DA SEMANA ───────────────────────────────────────────── */}
             <div style={{padding:"14px 18px",borderBottom:`1px solid ${T.border}`}}>
               <p style={{margin:"0 0 10px",fontSize:"9px",color:T.silver,textTransform:"uppercase",letterSpacing:"0.1em"}}>Esta semana</p>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px"}}>
                 {[
-                  {val:doneThisWeek,       label:"feitos",       color:T.green},
-                  {val:scheduledThisWeek,  label:"agendados",    color:T.blue},
-                  {val:`${(doneThisWeek*0.5).toFixed(1)}h`, label:"investidas", color:T.light},
-                  {val:projected?`~${projected}d`:"—",          label:"p/ concluir",  color:T.amber},
+                  {val:doneThisWeek,                            label:"feitos",        color:T.green},
+                  {val:scheduledThisWeek,                       label:"agendados",     color:T.blue},
+                  {val:`${(doneThisWeek*0.5).toFixed(1)}h`,     label:"investidas",    color:T.light},
+                  {val:projected?`~${projected}d`:"—",          label:"p/ concluir",   color:T.amber},
                 ].map((s,i)=>(
                   <div key={i} style={{padding:"8px 10px",background:T.surface,borderRadius:"8px"}}>
                     <p style={{margin:"0 0 1px",fontSize:"18px",fontWeight:700,color:s.color,fontFamily:"monospace",lineHeight:1}}>{s.val}</p>
@@ -353,17 +365,20 @@ function DashboardContent() {
               </div>
             </div>
 
-            {/* Próxima tarefa */}
+            {/* ── PRÓXIMA TAREFA ────────────────────────────────────────────── */}
             {nextBlock ? (
               <div style={{padding:"14px 18px",borderBottom:`1px solid ${T.border}`}}>
                 <p style={{margin:"0 0 8px",fontSize:"9px",color:T.silver,textTransform:"uppercase",letterSpacing:"0.1em"}}>Próxima tarefa</p>
                 <div onClick={()=>router.push(`/block/${nextBlock.id}`)}
-                  style={{padding:"10px 12px",background:T.surface,border:`1px solid ${T.amber}33`,borderRadius:"10px",cursor:"pointer"}}>
-                  <p style={{margin:"0 0 3px",fontSize:"12px",fontWeight:500,lineHeight:1.3,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{nextBlock.title}</p>
+                  style={{padding:"10px 12px",background:T.surface,border:`1px solid ${T.amber}44`,borderRadius:"10px",cursor:"pointer",transition:"border-color 150ms ease"}}
+                  onMouseEnter={e=>e.currentTarget.style.borderColor=T.amber+"88"}
+                  onMouseLeave={e=>e.currentTarget.style.borderColor=T.amber+"44"}
+                >
+                  <p style={{margin:"0 0 2px",fontSize:"11px",fontWeight:600,lineHeight:1.3,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{nextBlock.title}</p>
                   <p style={{margin:"0 0 8px",fontSize:"10px",color:T.silver}}>{fmtTime(nextBlock.scheduled_at)}</p>
                   <button onClick={e=>{e.stopPropagation();router.push(`/block/${nextBlock.id}`)}}
-                    style={{width:"100%",padding:"6px",background:T.blue,border:"none",borderRadius:"6px",color:T.light,fontSize:"11px",fontWeight:600,cursor:"pointer",fontFamily:"Inter,sans-serif"}}>
-                    Executar →
+                    style={{width:"100%",padding:"7px",background:T.blue,border:"none",borderRadius:"7px",color:T.light,fontSize:"11px",fontWeight:600,cursor:"pointer",fontFamily:"Inter,sans-serif",letterSpacing:"0.02em"}}>
+                    ▶ Executar agora
                   </button>
                 </div>
               </div>
@@ -376,77 +391,72 @@ function DashboardContent() {
               </div>
             )}
 
-            {/* Próximo objectivo */}
+            {/* ── OBJETIVO EM CURSO ─────────────────────────────────────────── */}
             {nextObjective && (
-              <div style={{padding:"14px 18px",borderBottom:`1px solid ${T.border}`}}>
-                <p style={{margin:"0 0 8px",fontSize:"9px",color:T.silver,textTransform:"uppercase",letterSpacing:"0.1em"}}>Objetivo em curso</p>
-                <p style={{margin:"0 0 6px",fontSize:"12px",lineHeight:1.4,color:T.light}}>{nextObjective.title}</p>
-                <div style={{height:"2px",background:T.dim,borderRadius:"999px",marginBottom:"4px"}}>
+              <div
+                onClick={()=>router.push(`/objectives?dreamId=${activeDream.id}`)}
+                style={{padding:"12px 18px",borderBottom:`1px solid ${T.border}`,cursor:"pointer",transition:"background 150ms ease"}}
+                onMouseEnter={e=>e.currentTarget.style.background=T.surface}
+                onMouseLeave={e=>e.currentTarget.style.background="transparent"}
+              >
+                <p style={{margin:"0 0 4px",fontSize:"9px",color:T.silver,textTransform:"uppercase",letterSpacing:"0.1em"}}>Objetivo em curso</p>
+                <p style={{margin:"0 0 6px",fontSize:"12px",lineHeight:1.4,color:T.light,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nextObjective.title}</p>
+                <div style={{height:"2px",background:T.dim,borderRadius:"999px",marginBottom:"3px"}}>
                   <div style={{height:"100%",width:`${nextObjPct}%`,background:T.green,borderRadius:"999px",transition:"width 600ms ease"}} />
                 </div>
                 <p style={{margin:0,fontSize:"10px",color:T.silver}}>{nextObjective.blocks_completed||0}/{nextObjective.blocks_count||0} blocos · {nextObjPct}%</p>
               </div>
             )}
 
-            {/* Testemunha */}
+            {/* ── TESTEMUNHA ────────────────────────────────────────────────── */}
             {witnessMsg && (
-              <div style={{padding:"12px 18px",borderBottom:`1px solid ${T.border}`,background:`${T.mauve}08`}}>
-                <p style={{margin:"0 0 4px",fontSize:"9px",color:T.mauve,textTransform:"uppercase",letterSpacing:"0.1em"}}>Testemunha</p>
+              <div style={{padding:"10px 18px",borderBottom:`1px solid ${T.border}`,background:`${T.mauve}08`}}>
+                <p style={{margin:"0 0 3px",fontSize:"9px",color:T.mauve,textTransform:"uppercase",letterSpacing:"0.1em"}}>💬 Testemunha</p>
                 <p style={{margin:0,fontSize:"11px",fontStyle:"italic",lineHeight:1.5,color:T.light}}>{witnessMsg}</p>
               </div>
             )}
 
-            {/* Link para progresso */}
-            <button onClick={()=>router.push(`/progress?dreamId=${activeDream.id}`)}
-              style={{width:"100%",padding:"10px 12px",background:`${T.green}0A`,border:`1px solid ${T.green}22`,borderRadius:"8px",color:T.green,fontSize:"12px",cursor:"pointer",fontFamily:"Inter,sans-serif",textAlign:"left",display:"flex",alignItems:"center",gap:"8px"}}>
-              <span style={{fontSize:"14px"}}>📈</span>
-              Ver progresso da jornada
-            </button>
-
-            {/* Conversa com North */}
-            <div style={{padding:"14px 18px",borderBottom:`1px solid ${T.border}`}}>
-              <p style={{margin:"0 0 8px",fontSize:"9px",color:T.silver,textTransform:"uppercase",letterSpacing:"0.1em"}}>Conversa com North</p>
-              {[
-                {key:"checkin",     label:"Check-in"},
-                {key:"extraction",  label:"Novo sonho"},
-                {key:"pre_block",   label:"Pré-bloco"},
-                {key:"post_block",  label:"Pós-bloco"},
-                {key:"crisis",      label:"Momento difícil"},
-                {key:"revaluation", label:"Reavaliar"},
-              ].map(c=>(
-                <button key={c.key} onClick={()=>selectConvType(c.key)}
-                  style={{display:"block",width:"100%",padding:"7px 10px",marginBottom:"2px",background:convType===c.key&&!isNewDreamFlow?`${T.blue}22`:"transparent",border:`1px solid ${convType===c.key&&!isNewDreamFlow?T.blue+"44":"transparent"}`,borderRadius:"6px",color:convType===c.key&&!isNewDreamFlow?T.blue:T.silver,fontSize:"12px",cursor:"pointer",textAlign:"left",fontFamily:"Inter,sans-serif"}}>
-                  {c.label}
-                </button>
-              ))}
-            </div>
-
-            {/* Partilhar */}
-            <div style={{padding:"14px 18px",borderBottom:`1px solid ${T.border}`}}>
-              <p style={{margin:"0 0 8px",fontSize:"9px",color:T.silver,textTransform:"uppercase",letterSpacing:"0.1em"}}>Partilhar</p>
-              <button onClick={()=>setShowWitness(true)}
-                style={{display:"block",width:"100%",padding:"7px 10px",marginBottom:"4px",background:`${T.mauve}18`,border:`1px solid ${T.mauve}44`,borderRadius:"6px",color:T.mauve,fontSize:"11px",cursor:"pointer",textAlign:"left",fontFamily:"Inter,sans-serif"}}>
-                + Convidar Testemunha {witnesses.length>0?`(${witnesses.length})`:""}
+            {/* ── AÇÕES ─────────────────────────────────────────────────────── */}
+            <div style={{padding:"14px 18px",display:"flex",flexDirection:"column",gap:"6px"}}>
+              {/* Botão único Novo Sonho */}
+              <button onClick={()=>router.push("/onboarding")}
+                style={{width:"100%",padding:"9px 12px",background:T.blue,border:"none",borderRadius:"8px",color:T.light,fontSize:"12px",fontWeight:500,cursor:"pointer",fontFamily:"Inter,sans-serif",display:"flex",alignItems:"center",gap:"7px"}}>
+                <span style={{fontSize:"14px"}}>✦</span> Novo Sonho
               </button>
+              {/* Testemunha */}
+              <button onClick={()=>setShowWitness(true)}
+                style={{width:"100%",padding:"8px 12px",background:`${T.mauve}18`,border:`1px solid ${T.mauve}33`,borderRadius:"8px",color:T.mauve,fontSize:"11px",cursor:"pointer",fontFamily:"Inter,sans-serif",textAlign:"left",display:"flex",alignItems:"center",gap:"7px"}}>
+                <span>👁</span> Convidar Testemunha {witnesses.length>0?`(${witnesses.length})`:""}
+              </button>
+              {/* Card de progresso */}
               <button onClick={generateShareCard}
-                style={{display:"block",width:"100%",padding:"7px 10px",background:"transparent",border:`1px solid ${T.border}`,borderRadius:"6px",color:T.silver,fontSize:"11px",cursor:"pointer",textAlign:"left",fontFamily:"Inter,sans-serif"}}>
-                Gerar card de progresso
+                style={{width:"100%",padding:"8px 12px",background:"transparent",border:`1px solid ${T.border}`,borderRadius:"8px",color:T.silver,fontSize:"11px",cursor:"pointer",fontFamily:"Inter,sans-serif",textAlign:"left",display:"flex",alignItems:"center",gap:"7px"}}>
+                <span>🔗</span> Gerar card de progresso
               </button>
             </div>
 
           </>) : (
+
+            /* ── SEM SONHO ATIVO ─────────────────────────────────────────── */
             <div style={{padding:"24px 18px"}}>
+              <p style={{margin:"0 0 12px",fontSize:"13px",color:T.silver,fontStyle:"italic",lineHeight:1.6}}>Você ainda não tem um sonho ativo.</p>
               <button onClick={()=>router.push("/onboarding")}
-                style={{width:"100%",padding:"12px",background:T.blue,border:"none",borderRadius:"8px",color:T.light,fontSize:"13px",cursor:"pointer",fontFamily:"Inter,sans-serif"}}>
-                + Começar novo sonho
+                style={{width:"100%",padding:"12px",background:T.blue,border:"none",borderRadius:"8px",color:T.light,fontSize:"13px",fontWeight:500,cursor:"pointer",fontFamily:"Inter,sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:"8px"}}>
+                <span>✦</span> Começar novo sonho
               </button>
             </div>
           )}
 
-          {/* Status calendário */}
-          <div style={{marginTop:"auto",padding:"12px 18px",borderTop:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:"6px"}}>
-            <div style={{width:"6px",height:"6px",borderRadius:"50%",background:calConnected?T.green:T.silver}} />
-            <span style={{fontSize:"10px",color:T.silver}}>{calConnected?"Calendar ativo":"Calendar inativo"}</span>
+          {/* ── RODAPÉ DA SIDEBAR ─────────────────────────────────────────── */}
+          <div style={{marginTop:"auto",padding:"10px 18px",borderTop:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+            <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
+              <div style={{width:"6px",height:"6px",borderRadius:"50%",background:calConnected?T.green:T.silver}} />
+              <span style={{fontSize:"10px",color:T.silver}}>{calConnected?"Calendar ativo":"Calendar inativo"}</span>
+            </div>
+            <button onClick={()=>router.push("/account")}
+              style={{background:"none",border:"none",color:T.silver,fontSize:"10px",cursor:"pointer",fontFamily:"Inter,sans-serif"}}>
+              Conta
+            </button>
           </div>
         </aside>
 
