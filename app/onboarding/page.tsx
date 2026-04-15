@@ -1,6 +1,6 @@
 // @ts-nocheck
 "use client";
-import React, { useState, useEffect, useRef, useCallback, Suspense } from "react";
+import React, { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 const T = {
@@ -9,51 +9,40 @@ const T = {
   amber:"#C9853A", border:"#252538", surface:"#141420",
 };
 
-// ── tipos ─────────────────────────────────────────────────────────────────────
+// ─── Tipos de mensagem ────────────────────────────────────────────────────────
 type Msg =
-  | { kind:"north"; id:string; text:string }
-  | { kind:"user";  id:string; text:string }
-  | { kind:"choice";id:string; options:Array<{label:string;value:string}> }
-  | { kind:"cards"; id:string; items:Array<{title:string;description?:string}> };
+  | { k:"north";  id:string; text:string }
+  | { k:"user";   id:string; text:string }
+  | { k:"opts";   id:string; opts:Array<{label:string; val:string}> }
+  | { k:"cards";  id:string; items:Array<{title:string; desc?:string}> }
+  | { k:"think" };
 
-// ── NorthBubble com streaming palavra a palavra ───────────────────────────────
-function NorthBubble({ text, onDone }: { text:string; onDone?:()=>void }) {
-  const [shown, setShown] = useState("");
-  const [finished, setFinished] = useState(false);
-  const done = useRef(false);
-
+// ─── Componentes de bubble ────────────────────────────────────────────────────
+function North({ text }: { text:string }) {
+  const [words, setWords] = useState<string[]>([]);
   useEffect(() => {
-    done.current = false;
-    setShown(""); setFinished(false);
-    const words = text.split(" ");
+    setWords([]);
+    const arr = text.split(" ");
     let i = 0;
     const iv = setInterval(() => {
-      if (i >= words.length) {
-        clearInterval(iv);
-        if (!done.current) { done.current = true; setFinished(true); }
-        return;
-      }
-      setShown(p => p ? p + " " + words[i] : words[i]);
-      i++;
+      if (i >= arr.length) { clearInterval(iv); return; }
+      setWords(p => [...p, arr[i++]]);
     }, 30);
-    return () => { clearInterval(iv); };
+    return () => clearInterval(iv);
   }, [text]);
-
-  useEffect(() => { if (finished && onDone) onDone(); }, [finished]);
-
   return (
     <div style={{ maxWidth:"80%", padding:"13px 17px", background:T.card,
       borderRadius:"14px 14px 14px 3px", border:`1px solid ${T.border}`,
-      borderLeft:`2px solid ${T.silver}55`, alignSelf:"flex-start" }}>
+      borderLeft:`2px solid ${T.silver}44`, alignSelf:"flex-start" }}>
       <p style={{ margin:0, fontSize:"14px", fontWeight:300, fontStyle:"italic",
         lineHeight:1.85, color:T.light, whiteSpace:"pre-wrap" }}>
-        {shown}{!finished && <span style={{ opacity:0.25, animation:"blink 1s infinite" }}>▊</span>}
+        {words.join(" ")}
       </p>
     </div>
   );
 }
 
-function UserBubble({ text }: { text:string }) {
+function User({ text }: { text:string }) {
   return (
     <div style={{ maxWidth:"72%", padding:"12px 17px", background:T.surface,
       borderRadius:"14px 14px 3px 14px", border:`1px solid ${T.border}`, alignSelf:"flex-end" }}>
@@ -62,21 +51,22 @@ function UserBubble({ text }: { text:string }) {
   );
 }
 
-function ChoiceBubble({ options, onPick, disabled }: {
-  options:Array<{label:string;value:string}>; onPick:(v:string)=>void; disabled:boolean
-}) {
+function Opts({ opts, onPick }: { opts:Array<{label:string;val:string}>; onPick:(v:string)=>void }) {
+  const [picked, setPicked] = useState(false);
   return (
-    <div style={{ display:"flex", flexDirection:"column", gap:"7px", alignSelf:"flex-start", maxWidth:"84%" }}>
-      {options.map(o => {
-        const isPrimary = o.value === "yes" || o.value === "ok" || o.value === "continue";
+    <div style={{ display:"flex", flexDirection:"column", gap:"7px",
+      alignSelf:"flex-start", maxWidth:"84%" }}>
+      {opts.map(o => {
+        const primary = o.val === "yes" || o.val === "ok" || o.val === "cont";
         return (
-          <button key={o.value} onClick={() => !disabled && onPick(o.value)}
-            disabled={disabled}
+          <button key={o.val}
+            onClick={() => { if (picked) return; setPicked(true); onPick(o.val); }}
             style={{ padding:"11px 18px", textAlign:"left", fontFamily:"Inter,sans-serif",
-              fontSize:"13px", cursor:disabled?"default":"pointer", borderRadius:"9px",
-              background:isPrimary?`${T.blue}22`:T.surface,
-              border:`1px solid ${isPrimary?T.blue+"55":T.border}`,
-              color:isPrimary?T.blue:T.silver, transition:"all 140ms ease" }}>
+              fontSize:"13px", cursor:picked?"default":"pointer", borderRadius:"9px",
+              background:primary?`${T.blue}22`:T.surface,
+              border:`1px solid ${primary?T.blue+"55":T.border}`,
+              color:primary?T.blue:T.silver,
+              opacity:picked?0.5:1, transition:"all 140ms ease" }}>
             {o.label}
           </button>
         );
@@ -85,19 +75,19 @@ function ChoiceBubble({ options, onPick, disabled }: {
   );
 }
 
-function CardsBubble({ items }: { items:Array<{title:string;description?:string}> }) {
+function Cards({ items }: { items:Array<{title:string;desc?:string}> }) {
   return (
     <div style={{ alignSelf:"flex-start", width:"100%", display:"flex", flexDirection:"column", gap:"7px" }}>
-      {items.map((item,i) => (
+      {items.map((it,i) => (
         <div key={i} style={{ display:"flex", gap:"12px", padding:"11px 15px",
           background:T.card, border:`1px solid ${T.border}`, borderRadius:"10px" }}>
           <span style={{ fontSize:"11px", color:T.blue, fontFamily:"monospace",
-            fontWeight:700, minWidth:"22px", paddingTop:"1px" }}>
+            fontWeight:700, minWidth:"22px", paddingTop:"2px" }}>
             {String(i+1).padStart(2,"0")}
           </span>
           <div>
-            <p style={{ margin:"0 0 2px", fontSize:"13px", fontWeight:500, color:T.light }}>{item.title}</p>
-            {item.description && <p style={{ margin:0, fontSize:"11px", color:T.silver, lineHeight:1.4 }}>{item.description}</p>}
+            <p style={{ margin:"0 0 2px", fontSize:"13px", fontWeight:500, color:T.light }}>{it.title}</p>
+            {it.desc && <p style={{ margin:0, fontSize:"11px", color:T.silver, lineHeight:1.4 }}>{it.desc}</p>}
           </div>
         </div>
       ))}
@@ -105,634 +95,394 @@ function CardsBubble({ items }: { items:Array<{title:string;description?:string}
   );
 }
 
-function ThinkingBubble() {
+function Think() {
   return (
     <div style={{ alignSelf:"flex-start", padding:"12px 18px", background:T.card,
       border:`1px solid ${T.border}`, borderLeft:`2px solid ${T.silver}33`,
       borderRadius:"14px 14px 14px 3px" }}>
-      <div style={{ display:"flex", gap:"5px", alignItems:"center" }}>
+      <div style={{ display:"flex", gap:"5px" }}>
         {[0,1,2].map(i => (
           <div key={i} style={{ width:"6px", height:"6px", borderRadius:"50%",
-            background:T.silver, opacity:0.5,
-            animation:`pulse 1.4s ease-in-out ${i*0.2}s infinite` }} />
+            background:T.silver, animation:`dp-dot 1.2s ease-in-out ${i*0.2}s infinite` }} />
         ))}
       </div>
     </div>
   );
 }
 
-// ── Engine principal ─────────────────────────────────────────────────────────
+// ─── Motor de conversa ────────────────────────────────────────────────────────
 function OnboardingContent() {
-  const router   = useRouter();
-  const params   = useSearchParams();
-  const endRef   = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const router = useRouter();
+  const params = useSearchParams();
+  const endRef  = useRef<HTMLDivElement>(null);
+  const inpRef  = useRef<HTMLInputElement>(null);
 
-  // Auth — ref para evitar stale closure
-  const isLoggedInRef = useRef(false);
-  const userRef       = useRef<any>(null);
+  // Auth — ref para nunca ter stale closure
+  const loggedIn = useRef(false);
 
-  // State
-  const [msgs,      setMsgs]      = useState<Msg[]>([]);
-  const [input,     setInput]     = useState("");
-  const [thinking,  setThinking]  = useState(false);
-  const [inputMode, setInputMode] = useState<"text"|"email"|"none">("none");
-  const [placeholder,setPlaceholder] = useState("Escreve aqui...");
-  const [locked,    setLocked]    = useState(true);    // input bloqueado
-  const [progress,  setProgress]  = useState(10);      // 10-100
+  // Mensagens
+  const [msgs, setMsgs] = useState<Msg[]>([]);
+  const push = (m: Msg) => { setMsgs(p => [...p, m]); setTimeout(() => endRef.current?.scrollIntoView({behavior:"smooth"}), 80); };
+  const uid  = () => Math.random().toString(36).slice(2);
+
+  // Input
+  const [inp,  setInp]  = useState("");
+  const [show, setShow] = useState(false);        // mostrar input
+  const [ph,   setPh]   = useState("");
+  const [type, setType] = useState<"text"|"email">("text");
+
+  // Progresso
+  const [pct, setPct] = useState(10);
+
+  // Stage — useRef para nunca ser stale
+  // 0=dream 1=email 2=deepen0 3=deepen1 4=deepen2 5=deepen3
+  // 6=log0 7=log1 8=log2 9=log3 10=build 11=tone 12=done
+  const stage = useRef(0);
 
   // Dados
-  const dreamRef     = useRef("");
-  const reflRef      = useRef("");
-  const answersRef   = useRef<Record<string,string>>({});
-  const exploreRef   = useRef<Array<{role:string;content:string}>>([]);
-  const stepRef      = useRef(0);    // 0-3: perguntas deepen
-  const logStepRef   = useRef(0);    // 0-4: perguntas logistica
-  const dreamIdRef   = useRef<string|null>(null);
+  const dream   = useRef("");
+  const refl    = useRef("");
+  const answers = useRef<Record<string,string>>({});
+  const explore = useRef<string[]>([]);
+  const dreamId = useRef<string|null>(null);
 
-  const uid = () => Math.random().toString(36).slice(2);
-  const scroll = () => setTimeout(() => endRef.current?.scrollIntoView({behavior:"smooth"}), 80);
-
-  // ── Adicionar mensagens ─────────────────────────────────────────────────────
-  // North: retorna promise que resolve quando o typewriter termina
-  function northMsg(text:string): Promise<void> {
-    return new Promise(resolve => {
-      const id = uid();
-      setMsgs(p => [...p, { kind:"north", id, text }]);
-      scroll();
-      // Calcula duração aproximada do typewriter (30ms por palavra)
-      const words = text.split(" ").length;
-      setTimeout(resolve, words * 32 + 300);
+  // ── helpers ────────────────────────────────────────────────────────────────
+  function north(text:string) {
+    // Remove "thinking" se estiver no final
+    setMsgs(p => {
+      const last = p[p.length-1];
+      if (last?.k === "think") return [...p.slice(0,-1), { k:"north", id:uid(), text }];
+      return [...p, { k:"north", id:uid(), text }];
     });
+    setTimeout(() => endRef.current?.scrollIntoView({behavior:"smooth"}), 80);
+    // Retorna promise que resolve após typewriter (approx)
+    const ms = text.split(" ").length * 32 + 400;
+    return new Promise<void>(r => setTimeout(r, ms));
   }
+  function user(text:string) { push({ k:"user", id:uid(), text }); }
+  function opts(o:Array<{label:string;val:string}>) { push({ k:"opts", id:uid(), opts:o }); }
+  function cards(items:Array<{title:string;desc?:string}>) { push({ k:"cards", id:uid(), items }); }
+  function think() { setMsgs(p => [...p, { k:"think" }]); setTimeout(() => endRef.current?.scrollIntoView({behavior:"smooth"}), 80); }
+  function unthink() { setMsgs(p => p[p.length-1]?.k==="think" ? p.slice(0,-1) : p); }
 
-  function userMsg(text:string) {
-    setMsgs(p => [...p, { kind:"user", id:uid(), text }]);
-    scroll();
+  function openInput(placeholder:string, t:"text"|"email"="text") {
+    setPh(placeholder); setType(t); setShow(true);
+    setTimeout(() => inpRef.current?.focus(), 120);
   }
-
-  function showChoices(options:Array<{label:string;value:string}>) {
-    setMsgs(p => [...p, { kind:"choice", id:uid(), options }]);
-    scroll();
-  }
-
-  function removeChoices() {
-    setMsgs(p => p.filter(m => m.kind !== "choice"));
-  }
-
-  function showCards(items:Array<{title:string;description?:string}>) {
-    setMsgs(p => [...p, { kind:"cards", id:uid(), items }]);
-    scroll();
-  }
-
-  function think() { setThinking(true); scroll(); }
-  function unthink() { setThinking(false); }
-
-  function openInput(mode:"text"|"email", ph:string) {
-    setInputMode(mode); setPlaceholder(ph); setLocked(false);
-    setTimeout(() => inputRef.current?.focus(), 100);
-  }
-  function closeInput() { setInputMode("none"); setLocked(true); }
+  function closeInput() { setShow(false); setInp(""); }
 
   // ── Inicialização ──────────────────────────────────────────────────────────
   useEffect(() => {
     (async () => {
-      // 1. Check auth
+      // Verificar auth
       try {
         const { createClient } = await import("@/lib/supabase/client");
-        const sb = createClient();
-        const { data: { user } } = await sb.auth.getUser();
-        if (user) { isLoggedInRef.current = true; userRef.current = user; }
+        const { data:{ user:u } } = await createClient().auth.getUser();
+        if (u) loggedIn.current = true;
       } catch {}
 
-      // 2. Abertura de North
-      await northMsg("Olá. Eu sou North.\n\nEstou aqui para te ajudar a transformar esse sonho em algo real.\n\nNão tenho pressa.");
-      await northMsg("Qual é o sonho que você não para de adiar?");
-      setProgress(15);
+      await north("Olá. Eu sou North.\n\nEstou aqui para transformar esse sonho em algo real.\n\nNão tenho pressa.");
+      await north("Qual é o sonho que você não para de adiar?");
+      setPct(15);
 
-      // Pre-fill se vier da URL
       const prefill = params.get("dream") || "";
-      if (prefill) setInput(prefill);
-
-      openInput("text", "Escreve o seu sonho aqui...");
+      if (prefill) setInp(prefill);
+      openInput("Escreve o seu sonho aqui...");
     })();
   }, []);
 
-  // ── handleSend ──────────────────────────────────────────────────────────────
-  async function handleSend() {
-    const val = input.trim();
-    if (!val || locked) return;
-    setInput(""); closeInput();
+  // ── Submissão do input ─────────────────────────────────────────────────────
+  async function submit() {
+    const val = inp.trim();
+    if (!val) return;
+    closeInput();
+    user(val);
 
-    userMsg(val);
-    await stepDream(val);
-  }
+    const s = stage.current;
 
-  // ── STEP 1 — Reflexão do sonho ──────────────────────────────────────────────
-  async function stepDream(dream:string) {
-    dreamRef.current = dream;
-    setProgress(25);
-    think();
-
-    // Reflexão via IA
-    let reflection = "";
-    try {
-      const res = await fetch("/api/north/chat", {
-        method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({
-          messages:[{ role:"user", content:
-            `O utilizador disse que o seu sonho é: "${dream}". Reflecte em 1-2 frases, específico e emotivo. Começa com "Você quer..." e captura a essência real do que está por trás das palavras. Termina com uma pergunta curta como "É isso?" ou "Ressoa?". Responde em português.`
-          }],
-          conversationType:"extraction",
-        }),
-      });
-      const reader = res.body!.getReader(); const dec = new TextDecoder();
-      while(true) {
-        const {done,value} = await reader.read(); if(done)break;
-        for(const line of dec.decode(value).split("\n")) {
-          if(line.startsWith("data: ")){try{const d=JSON.parse(line.slice(6));if(d.text)reflection+=d.text;}catch{}}
+    // Sonho
+    if (s === 0) {
+      dream.current = val;
+      think();
+      let ref = "";
+      try {
+        const res = await fetch("/api/north/chat", {
+          method:"POST", headers:{"Content-Type":"application/json"},
+          body: JSON.stringify({ messages:[{ role:"user", content:
+            `O utilizador descreveu o sonho: "${val}". Escreve 1-2 frases que reflectem o que há de mais profundo por trás dessas palavras. Começa com "Você quer..." e captura a emoção real. Termina com "Isso ressoa?" Responde em português.`
+          }], conversationType:"extraction" }),
+        });
+        const reader = res.body!.getReader(); const dec = new TextDecoder();
+        while(true){ const{done,value}=await reader.read(); if(done)break;
+          for(const l of dec.decode(value).split("\n")){
+            if(l.startsWith("data: ")){try{const d=JSON.parse(l.slice(6));if(d.text)ref+=d.text;}catch{}}
+          }
         }
-      }
-    } catch {}
-    if (!reflection) reflection = `Você quer ${dream}.\n\nIsso ressoa?`;
-    reflRef.current = reflection;
-
-    unthink();
-    await northMsg(reflection);
-    showChoices([
-      { label:"Sim, é exatamente isso.", value:"yes" },
-      { label:"Não completamente...", value:"rephrase" },
-    ]);
-  }
-
-  // ── STEP 2 — Email (só se não autenticado) ──────────────────────────────────
-  async function stepEmail() {
-    setProgress(35);
-    await northMsg("Para guardar o seu progresso, preciso de um email.");
-    openInput("email", "seuemail@exemplo.com");
-  }
-
-  async function handleEmail(email:string) {
-    if (!email.includes("@") || !email.includes(".")) {
-      await northMsg("Esse email não parece válido. Tenta de novo.");
-      openInput("email", "seuemail@exemplo.com");
+      } catch {}
+      refl.current = ref || `Você quer ${val}.\n\nIsso ressoa?`;
+      await north(refl.current);
+      opts([
+        { label:"Sim, é exatamente isso.", val:"yes" },
+        { label:"Não completamente...",    val:"no"  },
+      ]);
       return;
     }
-    think();
-    try {
-      const { createClient } = await import("@/lib/supabase/client");
-      const sb = createClient();
-      await sb.auth.signInWithOtp({
-        email, options:{ shouldCreateUser:true, emailRedirectTo:`${location.origin}/onboarding/callback` }
-      });
-    } catch {}
-    unthink();
-    await northMsg(`Enviei um link para ${email}.\n\nPode abrir numa outra aba — ou continuar aqui mesmo. O seu progresso fica guardado.`);
-    showChoices([{ label:"Continuar aqui agora →", value:"continue" }]);
+
+    // Email
+    if (s === 1) {
+      if (!val.includes("@")||!val.includes(".")) {
+        await north("Esse email não parece válido. Tenta de novo.");
+        openInput("seuemail@exemplo.com","email");
+        return;
+      }
+      think();
+      try {
+        const { createClient } = await import("@/lib/supabase/client");
+        await createClient().auth.signInWithOtp({
+          email:val, options:{ shouldCreateUser:true,
+            emailRedirectTo:`${location.origin}/onboarding/callback` }
+        });
+      } catch {}
+      await north(`Link enviado para ${val}.\n\nPode continuar aqui — o seu progresso fica guardado.`);
+      opts([{ label:"Continuar aqui →", val:"cont" }]);
+      return;
+    }
+
+    // Deepen 0-3
+    if (s >= 2 && s <= 5) {
+      explore.current.push(val);
+      stage.current++;
+      setPct(35 + (s-2)*7);
+      if (stage.current <= 5) {
+        await north(deepQ[stage.current - 2]);
+        openInput("Conta com as suas palavras...");
+      } else {
+        stage.current = 6;
+        setPct(60);
+        await north("Obrigado por partilhar isso.\n\nPreciso de alguns dados práticos para montar o plano.");
+        await north(logQ[0].q);
+        openInput(logQ[0].ph);
+      }
+      return;
+    }
+
+    // Logistics 0-3
+    if (s >= 6 && s <= 9) {
+      const idx = s - 6;
+      answers.current[logQ[idx].key] = val;
+      stage.current++;
+      setPct(65 + idx*5);
+      if (stage.current <= 9) {
+        const next = stage.current - 6;
+        await north(logQ[next].q);
+        openInput(logQ[next].ph);
+      } else {
+        stage.current = 10;
+        await doBuild();
+      }
+      return;
+    }
   }
 
-  // ── STEP 3 — Aprofundamento (4 perguntas contextuais) ──────────────────────
-  const deepenQuestions = [
+  // ── Perguntas ──────────────────────────────────────────────────────────────
+  const deepQ = [
     "Por que esse sonho importa para você agora — e não daqui a cinco anos?",
     "O que te impediu de começar até hoje?",
     "Se esse sonho se tornasse real amanhã, o que mudaria de concreto na sua vida?",
     "Quanto tempo por dia você consegue dedicar a isso — sendo honesto consigo mesmo?",
   ];
-
-  async function stepDeepen(idx:number) {
-    setProgress(40 + idx*5);
-    if (idx < deepenQuestions.length) {
-      await northMsg(deepenQuestions[idx]);
-      openInput("text", "Conta com as suas palavras...");
-    } else {
-      await stepLogistics(0);
-    }
-  }
-
-  // ── STEP 4 — Logística (5 perguntas) ───────────────────────────────────────
-  const logisticsQ = [
-    { text:"Quando você gostaria de ter esse sonho realizado?",          ph:"Ex: em 6 meses, até dezembro..." },
-    { text:"Qual é o melhor horário do dia para trabalhar nisso?",        ph:"Ex: manhã cedo, noite..." },
-    { text:"Como descreve seu nível atual nesse tema?",                  ph:"Ex: iniciante, tenho alguma base..." },
-    { text:"Tem algum compromisso ou limitação que pode dificultar?",    ph:"Ex: trabalho intenso, viagens..." },
+  const logQ = [
+    { key:"deadline",      q:"Quando você quer ter esse sonho realizado?",             ph:"Ex: em 6 meses, até dezembro..." },
+    { key:"best_time",     q:"Qual o melhor horário do dia para trabalhar nisso?",     ph:"Ex: manhã cedo, noite..." },
+    { key:"current_level", q:"Como descreve seu nível atual nesse tema?",              ph:"Ex: iniciante, tenho alguma base..." },
+    { key:"constraints",   q:"Tem algum compromisso que pode dificultar a jornada?",   ph:"Ex: trabalho intenso, viagens..." },
   ];
 
-  async function stepLogistics(idx:number) {
-    setProgress(60 + idx*5);
-    if (idx < logisticsQ.length) {
-      // Transição suave da fase de aprofundamento para logística
-      if (idx === 0) {
-        await northMsg("Obrigado por isso. Agora preciso de alguns dados práticos para montar o plano.");
+  // ── Build do plano ─────────────────────────────────────────────────────────
+  async function doBuild() {
+    setPct(85);
+    think();
+    await new Promise(r => setTimeout(r, 400));
+    setMsgs(p => {
+      const last = p[p.length-1];
+      if (last?.k === "think") {
+        return [...p.slice(0,-1), { k:"north", id:uid(), text:"Tenho tudo que preciso.\n\nVou analisar o que você me contou e construir os pilares do seu plano.\n\nIsso leva alguns segundos." }];
       }
-      logStepRef.current = idx;
-      await northMsg(logisticsQ[idx].text);
-      openInput("text", logisticsQ[idx].ph);
-    } else {
-      await stepBuild();
-    }
-  }
-
-  // ── STEP 5 — Construir plano ────────────────────────────────────────────────
-  async function stepBuild() {
-    setProgress(85);
-    await northMsg("Tenho tudo que preciso.\n\nVou analisar o que você me contou e construir os pilares do seu plano.\n\nIsso leva alguns segundos.");
+      return [...p, { k:"north", id:uid(), text:"Tenho tudo que preciso.\n\nVou analisar o que você me contou e construir os pilares do seu plano.\n\nIsso leva alguns segundos." }];
+    });
+    setTimeout(() => endRef.current?.scrollIntoView({behavior:"smooth"}), 80);
     think();
 
-    const a = answersRef.current;
-    const exploreCtx = exploreRef.current.filter(m=>m.role==="user").map(m=>m.content).join(" | ");
+    const exploreCtx = explore.current.join(" | ");
+    const a = answers.current;
 
     try {
-      // Criar sonho via API server-side
-      const dreamRes = await fetch("/api/dreams", {
+      const dr = await fetch("/api/dreams", {
         method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({
-          title: dreamRef.current,
-          description: exploreCtx,
-          declared_deadline: a.deadline,
-          time_available: a.daily_time || "1 hora",
-          status:"active", maturity_stage:3,
-        }),
+        body: JSON.stringify({ title:dream.current, description:exploreCtx,
+          declared_deadline:a.deadline, time_available:a.daily_time||"1 hora",
+          status:"active", maturity_stage:3 }),
       });
-      if (!dreamRes.ok) throw new Error(`Dream API ${dreamRes.status}`);
-      const { dream } = await dreamRes.json();
-      if (!dream?.id) throw new Error("No dream ID");
-      dreamIdRef.current = dream.id;
+      if (!dr.ok) throw new Error(`Dream ${dr.status}`);
+      const { dream: d } = await dr.json();
+      if (!d?.id) throw new Error("no id");
+      dreamId.current = d.id;
 
-      // Gerar objectivos
-      const objRes = await fetch("/api/north/extract-objectives", {
+      const or = await fetch("/api/north/extract-objectives", {
         method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({
-          dreamId: dream.id,
-          dreamTitle: dreamRef.current,
-          dreamReflection: reflRef.current,
-          exploreContext: exploreCtx,
-          deadline: a.deadline,
-          dailyTime: a.daily_time || "1 hora",
-          bestTime: a.best_time,
-          currentLevel: a.current_level,
-          constraints: a.constraints,
-        }),
+        body: JSON.stringify({ dreamId:d.id, dreamTitle:dream.current,
+          dreamReflection:refl.current, exploreContext:exploreCtx,
+          deadline:a.deadline, dailyTime:a.daily_time||"1 hora",
+          bestTime:a.best_time, currentLevel:a.current_level,
+          constraints:a.constraints }),
       });
-      if (!objRes.ok) throw new Error(`Obj API ${objRes.status}`);
-      const { objectives } = await objRes.json();
-      if (!objectives?.length) throw new Error("No objectives");
+      if (!or.ok) throw new Error(`Objectives ${or.status}`);
+      const { objectives:objs } = await or.json();
+      if (!objs?.length) throw new Error("no objectives");
 
       unthink();
-      setProgress(92);
-      await northMsg(`Identifiquei ${objectives.length} objetivos para tornar esse sonho real.`);
-      showCards(objectives.map((o:any) => ({ title:o.title, description:o.description })));
-      await new Promise(r => setTimeout(r, 800));
-      showChoices([{ label:"Faz sentido. Continuar →", value:"ok" }]);
+      setPct(92);
+      await north(`Identifiquei ${objs.length} objetivos para tornar esse sonho real.`);
+      cards(objs.map((o:any) => ({ title:o.title, desc:o.description })));
+      await new Promise(r => setTimeout(r, 600));
+      stage.current = 11;
+      opts([{ label:"Faz sentido. Continuar →", val:"ok" }]);
 
-    } catch (err:any) {
+    } catch (e:any) {
       unthink();
-      console.error("buildPlan:", err?.message);
-      await northMsg("Algo correu mal ao construir o plano. Vamos tentar de novo?");
-      showChoices([
-        { label:"Tentar novamente", value:"retry" },
-        { label:"Voltar ao início", value:"restart" },
+      console.error("build:", e?.message);
+      await north("Algo correu mal ao construir o plano. Vamos tentar de novo?");
+      opts([
+        { label:"Tentar novamente", val:"retry"   },
+        { label:"Recomeçar",        val:"restart" },
       ]);
     }
   }
 
-  // ── STEP 6 — Tom de North ───────────────────────────────────────────────────
-  async function stepTone() {
-    setProgress(96);
-    await northMsg("Uma última coisa.\n\nComo você quer que eu esteja nos momentos difíceis da jornada?");
-    showChoices([
-      { label:"Direto — objetivo, sem rodeios",      value:"direct" },
-      { label:"Gentil — acolhedor e paciente",        value:"gentle" },
-      { label:"Provocador — que me desafie mais",     value:"challenger" },
-    ]);
-  }
-
-  // ── handleChoice ───────────────────────────────────────────────────────────
-  async function handleChoice(value:string) {
-    removeChoices();
-    setLocked(true);
-
-    // --- Reflexão ---
-    if (value === "yes") {
-      userMsg("Sim, é exatamente isso.");
-      if (isLoggedInRef.current) {
-        // Logado → ir directo para aprofundamento
-        await northMsg("Perfeito.\n\nQuero entender melhor esse sonho antes de construir o plano.");
-        await stepDeepen(0);
+  // ── Escolhas ──────────────────────────────────────────────────────────────
+  async function pick(val:string) {
+    // Confirmar sonho
+    if (val === "yes") {
+      user("Sim, é exatamente isso.");
+      if (loggedIn.current) {
+        stage.current = 2;
+        setPct(30);
+        await north("Perfeito.\n\nQuero entender melhor esse sonho antes de montar o plano.");
+        await north(deepQ[0]);
+        openInput("Conta com as suas palavras...");
       } else {
-        await stepEmail();
+        stage.current = 1;
+        setPct(22);
+        await north("Para guardar o seu progresso, preciso de um email.");
+        openInput("seuemail@exemplo.com","email");
       }
       return;
     }
-
-    if (value === "rephrase") {
-      userMsg("Não completamente...");
-      await northMsg("Sem problema. Conte com as suas próprias palavras — o que você quer mesmo?");
-      openInput("text", "Escreve o seu sonho aqui...");
+    if (val === "no") {
+      user("Não completamente...");
+      await north("Sem problema. Conta com as tuas próprias palavras — o que você quer mesmo?");
+      dream.current = "";
+      stage.current = 0;
+      openInput("Escreve o seu sonho aqui...");
       return;
     }
-
-    // --- Email enviado ---
-    if (value === "continue") {
-      userMsg("Continuar aqui agora.");
-      await northMsg("Perfeito. Vou continuar com você.\n\nQuero entender melhor esse sonho antes de construir o plano.");
-      stepRef.current = 0;
-      await stepDeepen(0);
+    if (val === "cont") {
+      user("Continuar aqui agora.");
+      stage.current = 2;
+      setPct(30);
+      await north("Ótimo.\n\nQuero entender melhor esse sonho antes de montar o plano.");
+      await north(deepQ[0]);
+      openInput("Conta com as suas palavras...");
       return;
     }
-
-    // --- Objectivos ok ---
-    if (value === "ok") {
-      userMsg("Faz sentido, continuar.");
-      await stepTone();
+    if (val === "ok") {
+      user("Faz sentido, continuar.");
+      stage.current = 11;
+      setPct(96);
+      await north("Uma última coisa.\n\nComo você quer que eu esteja nos momentos difíceis da jornada?");
+      opts([
+        { label:"Direto — objetivo, sem rodeios",      val:"direct"     },
+        { label:"Gentil — acolhedor e paciente",        val:"gentle"     },
+        { label:"Provocador — que me desafie mais",     val:"challenger" },
+      ]);
       return;
     }
-
-    // --- Tom escolhido ---
-    if (["direct","gentle","challenger"].includes(value)) {
-      const labels: Record<string,string> = { direct:"Direto", gentle:"Gentil", challenger:"Provocador" };
-      userMsg(labels[value]);
-      setProgress(100);
+    if (["direct","gentle","challenger"].includes(val)) {
+      const labels:Record<string,string> = { direct:"Direto", gentle:"Gentil", challenger:"Provocador" };
+      user(labels[val]);
+      stage.current = 12;
+      setPct(100);
       think();
       await new Promise(r => setTimeout(r, 1200));
-      unthink();
-      await northMsg("Entendido.\n\nO seu plano está pronto.\n\nO primeiro bloco foi agendado para as próximas 24 horas.\n\nSó precisas aparecer.");
+      await north("Entendido.\n\nO seu plano está pronto.\n\nO primeiro bloco foi agendado para as próximas 24 horas.\n\nSó precisas aparecer.");
       await new Promise(r => setTimeout(r, 1800));
-      router.push(dreamIdRef.current ? `/objectives?dreamId=${dreamIdRef.current}` : "/dashboard");
+      router.push(dreamId.current ? `/objectives?dreamId=${dreamId.current}` : "/dashboard");
       return;
     }
-
-    // --- Retry / Restart ---
-    if (value === "retry") { await stepBuild(); return; }
-    if (value === "restart") { router.push("/onboarding"); return; }
-  }
-
-  // ── handleInput (submit do campo de texto) ─────────────────────────────────
-  async function handleInput() {
-    const val = input.trim();
-    if (!val || locked) return;
-    setInput(""); closeInput();
-    userMsg(val);
-
-    // Determinar em que fase estamos pelo inputMode + stepRefs
-    const curLogStep = logStepRef.current;
-    const curDStep   = stepRef.current;
-
-    // Fase de email
-    if (inputMode === "email") {
-      await handleEmail(val);
+    if (val === "retry") {
+      stage.current = 10;
+      await doBuild();
       return;
     }
-
-    // Fase de sonho (só tem input aberto na fase inicial)
-    if (msgs.filter(m=>m.kind==="user").length === 1 && dreamRef.current === "") {
-      await stepDream(val);
-      return;
-    }
-    // Re-rephrase
-    if (msgs.filter(m=>m.kind==="user").length >= 1 && dreamRef.current === "") {
-      dreamRef.current = val;
-      await stepDream(val);
-      return;
-    }
-
-    // Determinar contexto: estamos em deepen ou logistics?
-    const totalUserMsgs = msgs.filter(m=>m.kind==="user").length;
-    // Deepen: após "Sim, é exatamente isso" (1 user msg) + 4 perguntas
-    // A lógica: exploramos 4 questões antes da logística
-    const deepenAnswers = exploreRef.current.filter(m=>m.role==="user").length;
-    const logAnswers    = Object.keys(answersRef.current).filter(k=>["deadline","best_time","current_level","constraints"].includes(k)).length;
-
-    if (deepenAnswers < deepenQuestions.length && stepRef.current > 0) {
-      // Ainda em deepen
-      exploreRef.current.push({ role:"user", content:val });
-      const next = exploreRef.current.filter(m=>m.role==="user").length;
-      if (next < deepenQuestions.length) {
-        await stepDeepen(next);
-      } else {
-        await stepLogistics(0);
-      }
-      return;
-    }
-
-    if (logAnswers < logisticsQ.length) {
-      // Em logística
-      const logKeys = ["deadline","best_time","current_level","constraints"];
-      const keyIdx  = logAnswers;
-      if (keyIdx < logKeys.length) {
-        answersRef.current[logKeys[keyIdx]] = val;
-        if (keyIdx + 1 < logisticsQ.length) {
-          await stepLogistics(keyIdx + 1);
-        } else {
-          await stepBuild();
-        }
-      }
-      return;
-    }
-  }
-
-  // ── Lógica: detectar fase actual para routing do input ─────────────────────
-  // Simplificado: usar um stepName ref
-  const stepNameRef = useRef<"dream"|"rephrase"|"email"|"deepen"|"logistics"|"done">("dream");
-
-  // Reconstruir com stepNameRef para routing limpo
-  // Vou usar uma abordagem mais simples: um único "stage" que avança linearmente
-  const stageRef = useRef(0);
-  // 0: dream, 1: email (se não logado), 2: deepen[0-3], 6: logistics[0-3], 10: build, 11: tone, 12: done
-
-  async function routeInput(val:string) {
-    const s = stageRef.current;
-
-    if (s === 0) {
-      // Sonho
-      dreamRef.current = val;
-      await stepDream(val);
-      return;
-    }
-    if (s === 0.5) {
-      // Rephrase do sonho
-      dreamRef.current = val;
-      stageRef.current = 0;
-      await stepDream(val);
-      return;
-    }
-    if (s === 1) {
-      // Email
-      await handleEmail(val);
-      return;
-    }
-    if (s >= 2 && s <= 5) {
-      // Deepen q0-q3
-      const qIdx = s - 2;
-      exploreRef.current.push({ role:"user", content:val });
-      if (qIdx + 1 < deepenQuestions.length) {
-        stageRef.current = s + 1;
-        await stepDeepen(qIdx + 1);
-      } else {
-        stageRef.current = 6;
-        await stepLogistics(0);
-      }
-      return;
-    }
-    if (s >= 6 && s <= 9) {
-      // Logistics q0-q3
-      const qIdx = s - 6;
-      const logKeys = ["deadline","best_time","current_level","constraints"];
-      answersRef.current[logKeys[qIdx]] = val;
-      if (qIdx + 1 < logisticsQ.length) {
-        stageRef.current = s + 1;
-        await stepLogistics(qIdx + 1);
-      } else {
-        stageRef.current = 10;
-        await stepBuild();
-      }
-      return;
-    }
-  }
-
-  // ── handleSend (limpo) ─────────────────────────────────────────────────────
-  async function handleSendClean() {
-    const val = input.trim();
-    if (!val || locked) return;
-    setInput(""); closeInput();
-    userMsg(val);
-    await routeInput(val);
-  }
-
-  // Override handleChoice para avançar stages
-  async function handleChoiceClean(value:string) {
-    removeChoices();
-
-    if (value === "yes") {
-      userMsg("Sim, é exatamente isso.");
-      if (isLoggedInRef.current) {
-        stageRef.current = 2; // deepen[0]
-        await northMsg("Perfeito.\n\nQuero entender melhor esse sonho antes de montar o plano.");
-        await stepDeepen(0);
-      } else {
-        stageRef.current = 1; // email
-        await stepEmail();
-      }
-      return;
-    }
-    if (value === "rephrase") {
-      userMsg("Não completamente...");
-      stageRef.current = 0.5;
-      await northMsg("Sem problema. Conta com as tuas próprias palavras — o que você quer mesmo?");
-      openInput("text", "Escreve o seu sonho...");
-      return;
-    }
-    if (value === "continue") {
-      userMsg("Continuar aqui agora.");
-      stageRef.current = 2;
-      await northMsg("Perfeito.\n\nQuero entender melhor esse sonho antes de montar o plano.");
-      await stepDeepen(0);
-      return;
-    }
-    if (value === "ok") {
-      userMsg("Faz sentido, continuar.");
-      stageRef.current = 11;
-      await stepTone();
-      return;
-    }
-    if (["direct","gentle","challenger"].includes(value)) {
-      const labels: Record<string,string> = { direct:"Direto", gentle:"Gentil", challenger:"Provocador" };
-      userMsg(labels[value]);
-      stageRef.current = 12;
-      setProgress(100);
-      think();
-      await new Promise(r => setTimeout(r, 1200));
-      unthink();
-      await northMsg("Entendido.\n\nO seu plano está pronto.\n\nO primeiro bloco foi agendado para as próximas 24 horas.\n\nSó precisas aparecer.");
-      await new Promise(r => setTimeout(r, 1600));
-      router.push(dreamIdRef.current ? `/objectives?dreamId=${dreamIdRef.current}` : "/dashboard");
-      return;
-    }
-    if (value === "retry") {
-      stageRef.current = 10;
-      await stepBuild();
-      return;
-    }
-    if (value === "restart") {
+    if (val === "restart") {
       router.push("/onboarding");
       return;
     }
   }
-
-  // Overrides limpos para o stepDream usar handleChoiceClean e stepEmail avançar stage
-  const origStepEmail = stepEmail;
-  const cleanStepEmail = async () => {
-    setProgress(35);
-    await northMsg("Para guardar o seu progresso, preciso de um email.");
-    openInput("email", "seuemail@exemplo.com");
-  };
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div style={{ minHeight:"100vh", height:"100vh", background:T.bg, color:T.light,
       fontFamily:"Inter,sans-serif", display:"flex", flexDirection:"column", overflow:"hidden" }}>
 
-      <style>{`
-        @keyframes pulse { 0%,80%,100%{opacity:.25} 40%{opacity:1} }
-        @keyframes blink  { 0%,100%{opacity:.25} 50%{opacity:.7} }
-      `}</style>
+      <style>{`@keyframes dp-dot{0%,80%,100%{opacity:.2}40%{opacity:.9}}`}</style>
 
-      {/* Header */}
       <header style={{ padding:"13px 24px", display:"flex", alignItems:"center",
         justifyContent:"space-between", flexShrink:0, borderBottom:`1px solid ${T.border}22` }}>
-        <p style={{ fontFamily:"'Playfair Display',serif", fontSize:"18px", fontWeight:700,
-          margin:0, letterSpacing:"0.04em", color:T.light }}>DP.</p>
-        <div style={{ flex:1, maxWidth:"160px", margin:"0 24px" }}>
-          <div style={{ height:"2px", background:T.border, borderRadius:"999px", overflow:"hidden" }}>
-            <div style={{ height:"100%", width:`${progress}%`, background:`linear-gradient(90deg,${T.blue},${T.green})`,
-              borderRadius:"999px", transition:"width 700ms ease" }} />
-          </div>
+        <p style={{ fontFamily:"'Playfair Display',serif", fontSize:"18px", fontWeight:700, margin:0, color:T.light }}>DP.</p>
+        <div style={{ flex:1, maxWidth:"150px", margin:"0 20px", height:"2px", background:T.border, borderRadius:"999px", overflow:"hidden" }}>
+          <div style={{ height:"100%", width:`${pct}%`, background:`linear-gradient(90deg,${T.blue},${T.green})`,
+            borderRadius:"999px", transition:"width 700ms ease" }} />
         </div>
         <button onClick={() => router.push("/dashboard")}
-          style={{ background:"none", border:"none", color:T.silver, cursor:"pointer",
-            fontSize:"11px", fontFamily:"Inter,sans-serif", opacity:0.7 }}>
+          style={{ background:"none", border:"none", color:T.silver, cursor:"pointer", fontSize:"11px", fontFamily:"Inter,sans-serif" }}>
           Sair
         </button>
       </header>
 
-      {/* Chat */}
-      <div style={{ flex:1, overflowY:"auto", display:"flex", flexDirection:"column",
-        gap:"12px", maxWidth:"640px", width:"100%", margin:"0 auto", padding:"20px 24px 16px",
-        boxSizing:"border-box" }}>
-        {msgs.map(m => {
-          if (m.kind === "north")  return <NorthBubble  key={m.id} text={m.text} />;
-          if (m.kind === "user")   return <UserBubble   key={m.id} text={m.text} />;
-          if (m.kind === "choice") return <ChoiceBubble key={m.id} options={m.options} disabled={locked&&inputMode==="none"} onPick={handleChoiceClean} />;
-          if (m.kind === "cards")  return <CardsBubble  key={m.id} items={m.items} />;
+      <div style={{ flex:1, overflowY:"auto", display:"flex", flexDirection:"column", gap:"12px",
+        maxWidth:"640px", width:"100%", margin:"0 auto", padding:"20px 24px 16px", boxSizing:"border-box" }}>
+        {msgs.map((m, i) => {
+          if (m.k === "north")  return <North key={(m as any).id} text={(m as any).text} />;
+          if (m.k === "user")   return <User  key={(m as any).id} text={(m as any).text} />;
+          if (m.k === "opts")   return <Opts  key={(m as any).id} opts={(m as any).opts} onPick={pick} />;
+          if (m.k === "cards")  return <Cards key={(m as any).id} items={(m as any).items} />;
+          if (m.k === "think")  return <Think key={i} />;
           return null;
         })}
-        {thinking && <ThinkingBubble />}
         <div ref={endRef} style={{ height:"8px" }} />
       </div>
 
-      {/* Input */}
-      <div style={{ padding:"10px 24px 22px", flexShrink:0, maxWidth:"640px",
-        width:"100%", margin:"0 auto", boxSizing:"border-box" }}>
-        {inputMode !== "none" && (
+      {show && (
+        <div style={{ padding:"10px 24px 22px", flexShrink:0, maxWidth:"640px",
+          width:"100%", margin:"0 auto", boxSizing:"border-box" }}>
           <div style={{ display:"flex", gap:"8px" }}>
-            <input ref={inputRef} value={input} onChange={e => setInput(e.target.value)}
-              onKeyDown={e => e.key==="Enter" && handleSendClean()}
-              placeholder={placeholder}
-              type={inputMode === "email" ? "email" : "text"}
+            <input ref={inpRef} value={inp} onChange={e => setInp(e.target.value)}
+              onKeyDown={e => e.key==="Enter" && submit()}
+              placeholder={ph} type={type}
               style={{ flex:1, background:T.card, border:`1px solid ${T.border}`,
                 borderRadius:"10px", padding:"13px 16px", color:T.light, fontSize:"14px",
                 fontFamily:"Inter,sans-serif", outline:"none", transition:"border-color 150ms ease" }}
-              onFocus={e => e.target.style.borderColor = T.blue+"66"}
-              onBlur={e  => e.target.style.borderColor = T.border}
+              onFocus={e => e.target.style.borderColor=T.blue+"66"}
+              onBlur={e => e.target.style.borderColor=T.border}
             />
-            <button onClick={handleSendClean} disabled={!input.trim()}
-              style={{ padding:"13px 20px", background:input.trim()?T.blue:T.border,
+            <button onClick={submit} disabled={!inp.trim()}
+              style={{ padding:"13px 20px", background:inp.trim()?T.blue:T.border,
                 border:"none", borderRadius:"10px", color:T.light, fontSize:"15px",
-                cursor:input.trim()?"pointer":"default", transition:"background 150ms ease" }}>
-              →
-            </button>
+                cursor:inp.trim()?"pointer":"default", transition:"background 150ms ease" }}>→</button>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
