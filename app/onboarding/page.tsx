@@ -1,634 +1,611 @@
 // @ts-nocheck
 "use client";
-import { useState, useEffect, useRef, useCallback, Suspense } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 
+// ── Tokens ────────────────────────────────────────────────────────────────────
 const T = {
-  bg: "#0D0D14", card: "#1A1A2E", light: "#E8E4DC", silver: "#6B6B80",
-  blue: "#4A6FA5", green: "#2D6A4F", amber: "#C9853A", border: "#252538",
-  surface: "#141420",
+  bg:"#0D0D14", card:"#1A1A2E", light:"#E8E4DC",
+  silver:"#6B6B80", blue:"#4A6FA5", green:"#2D6A4F",
+  amber:"#C9853A", border:"#252538", surface:"#141420",
 };
 
-// Fases do onboarding
-type Phase =
-  | "intro"          // North se apresenta
-  | "dream"          // Utilizador escreve o sonho
-  | "reflection"     // North devolve reflexo → sim/não
-  | "explore"        // North faz perguntas livres (4-6 trocas)
-  | "logistics"      // 7 perguntas logísticas
-  | "building"       // North constrói objectivos
-  | "review"         // Utilizador valida objectivos
-  | "tone"           // Escolha do tom
-  | "complete";      // Fim
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
 
-// Perguntas logísticas — após a exploração
-const LOGISTICS = [
-  { id: "deadline",      text: "Em quanto tempo você quer que esse sonho seja realidade?", placeholder: "Ex: em 6 meses, até dezembro de 2026..." },
-  { id: "daily_time",    text: "Quanto tempo por dia você consegue dedicar a isso — sendo honesto?", placeholder: "Ex: 1 hora por dia, 30 minutos de manhã..." },
-  { id: "best_time",     text: "Em que horário do dia você tem mais foco e energia?", placeholder: "Ex: manhã cedo, depois do almoço, à noite..." },
-  { id: "current_level", text: "Qual é o seu ponto de partida hoje em relação a esse sonho?", placeholder: "Ex: nunca comecei, já tentei, tenho alguma base..." },
-  { id: "constraints",   text: "Há dias ou períodos em que você definitivamente não consegue trabalhar nisso?", placeholder: "Ex: fins de semana, às terças à noite, dezembro..." },
-  { id: "success_metric",text: "Como você vai saber que conseguiu? O que vai ser concretamente diferente?", placeholder: "Ex: vou ter X, conseguirei Y, vou sentir Z..." },
-];
-
-const LOGISTICS_ACK: Record<string, string> = {
-  deadline: "Entendido.",
-  daily_time: "Esse é o número real que importa.",
-  best_time: "Faz sentido.",
-  current_level: "Boa. Agora sei de onde partimos.",
-  constraints: "Anotado no plano.",
-};
-
-function OnboardingContent() {
-  const router = useRouter();
-  const supabase = createClient();
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
-  const searchParams = useSearchParams();
-  const initialDream = searchParams.get("dream") || "";
-
-  const [phase, setPhase] = useState<Phase>("intro");
-  const [messages, setMessages] = useState<any[]>([]);
-  const [thinking, setThinking] = useState(false);
-  const [input, setInput] = useState(initialDream);
-  const [submitting, setSubmitting] = useState(false);
-
-  // Dados recolhidos
-  const [dreamText, setDreamText] = useState(initialDream);
-  const [dreamReflection, setDreamReflection] = useState("");
-
-  // Exploração livre
-  const [exploreIdx, setExploreIdx] = useState(0);      // quantas perguntas feitas
-  const [exploreHistory, setExploreHistory] = useState<any[]>([]); // historial da exploração
-
-  // Logística
-  const [logIdx, setLogIdx] = useState(0);
-  const [answers, setAnswers] = useState<Record<string, string>>({});
-
-  // Resultado
-  const [objectives, setObjectives] = useState<any[]>([]);
-  const [dreamId, setDreamId] = useState<string | null>(null);
-  const [tone, setTone] = useState<string | null>(null);
-  const [buildError, setBuildError] = useState<string | null>(null);
-
-  const scroll = useCallback(() => {
-    setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 80);
-  }, []);
-
-  const addNorth = useCallback((content: string, delayMs = 900) => {
-    return new Promise<void>(resolve => {
-      setThinking(true);
-      scroll();
-      setTimeout(() => {
-        setThinking(false);
-        setMessages(prev => [...prev, { role: "north", content }]);
-        scroll();
-        resolve();
-      }, delayMs);
-    });
-  }, [scroll]);
-
-  // ── INTRO ──────────────────────────────────────────────────────────────────
+// Digita palavra a palavra (efeito typewriter suave)
+function useTypewriter(text: string, speed = 28) {
+  const [displayed, setDisplayed] = useState("");
+  const [done, setDone] = useState(false);
   useEffect(() => {
-    if (initialDream) {
-      addNorth(
-        "Olá. Sou North.\n\nVi que você já tem um sonho em mente. Vou entender melhor antes de construirmos o seu plano.",
-        600
-      ).then(() => { setPhase("dream"); setTimeout(() => inputRef.current?.focus(), 200); });
-    } else {
-      addNorth(
-        "Olá. Eu sou North.\n\nAntes de qualquer plano, preciso entender o seu sonho de verdade.\n\nNão tenho pressa. Começa.",
-        900
-      ).then(() => { setPhase("dream"); setTimeout(() => inputRef.current?.focus(), 200); });
-    }
+    if (!text) return;
+    setDisplayed(""); setDone(false);
+    const words = text.split(" ");
+    let i = 0;
+    const iv = setInterval(() => {
+      if (i >= words.length) { clearInterval(iv); setDone(true); return; }
+      setDisplayed(prev => prev ? prev + " " + words[i] : words[i]);
+      i++;
+    }, speed);
+    return () => clearInterval(iv);
+  }, [text]);
+  return { displayed, done };
+}
+
+// ── Componente NorthMessage — aparece palavra a palavra ─────────────────────
+function NorthMsg({ text, onDone }: { text: string; onDone?: () => void }) {
+  const { displayed, done } = useTypewriter(text, 32);
+  useEffect(() => { if (done && onDone) onDone(); }, [done]);
+  return (
+    <div style={{ maxWidth:"76%", padding:"12px 16px", background:T.card, borderRadius:"12px 12px 12px 2px",
+      border:`1px solid ${T.border}`, borderLeft:`2px solid ${T.silver}44`, alignSelf:"flex-start" }}>
+      <p style={{ margin:0, fontSize:"14px", fontWeight:300, fontStyle:"italic", lineHeight:1.8, color:T.light, whiteSpace:"pre-wrap" }}>
+        {displayed}{!done && <span style={{ opacity:0.3 }}>▊</span>}
+      </p>
+    </div>
+  );
+}
+
+function UserMsg({ text }: { text: string }) {
+  return (
+    <div style={{ maxWidth:"72%", padding:"11px 16px", background:T.surface, borderRadius:"12px 12px 2px 12px",
+      border:`1px solid ${T.border}`, alignSelf:"flex-end" }}>
+      <p style={{ margin:0, fontSize:"14px", lineHeight:1.7, color:T.light }}>{text}</p>
+    </div>
+  );
+}
+
+// ── Onboarding principal ─────────────────────────────────────────────────────
+function OnboardingContent() {
+  const router     = useRouter();
+  const params     = useSearchParams();
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  const inputRef   = useRef<HTMLInputElement>(null);
+
+  // Histórico de chat
+  type Msg = { role:"north"|"user"|"choices"|"thinking"; text?:string; choices?: Array<{label:string;value:string}>; id?: string };
+  const [msgs,       setMsgs]       = useState<Msg[]>([]);
+  const [input,      setInput]      = useState("");
+  const [thinking,   setThinking]   = useState(false);
+  const [phase,      setPhase]      = useState<"dream"|"email"|"deepen"|"logistics"|"building"|"objectives"|"tone"|"done">("dream");
+  const [disabled,   setDisabled]   = useState(false);
+
+  // Dados colectados
+  const [dreamText,      setDreamText]      = useState("");
+  const [dreamReflection,setDreamReflection]= useState("");
+  const [email,          setEmail]          = useState("");
+  const [answers,        setAnswers]        = useState<Record<string,string>>({});
+  const [exploreHistory, setExploreHistory] = useState<Array<{role:string;content:string}>>([]);
+  const [questionIdx,    setQuestionIdx]    = useState(0);
+  const [objectives,     setObjectives]     = useState<any[]>([]);
+  const [dreamId,        setDreamId]        = useState<string|null>(null);
+  const [buildErr,       setBuildErr]       = useState<string|null>(null);
+
+  const scrollChat = () => setTimeout(() => chatEndRef.current?.scrollIntoView({behavior:"smooth"}), 60);
+
+  // ── Inicialização ─────────────────────────────────────────────────────────
+  useEffect(() => {
+    const prefill = params.get("dream") || "";
+    setTimeout(async () => {
+      await addNorth("Olá. Eu sou North.\n\nEstou aqui para te ajudar a transformar isso em algo real.\n\nNão tenho pressa.", 0);
+      await sleep(1800);
+      await addNorth("Qual é o sonho que você não para de adiar?", 0);
+      if (prefill) {
+        await sleep(600);
+        setInput(prefill);
+      }
+    }, 400);
   }, []);
 
-  // ── SUBMIT SONHO ───────────────────────────────────────────────────────────
-  async function handleDreamSubmit() {
-    if (!input.trim() || submitting) return;
-    const dream = input.trim();
-    setDreamText(dream);
-    setInput("");
-    setMessages(prev => [...prev, { role: "user", content: dream }]);
-    setSubmitting(true);
-
-    const res = await fetch("/api/north/reflect", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ dream }),
-    });
-    const data = res.ok ? await res.json() : {};
-    const reflection = data.reflection || "Você quer construir algo que seja verdadeiramente seu.";
-    setDreamReflection(reflection);
-    setSubmitting(false);
-
-    await addNorth(`${reflection}\n\nIsso está certo?`, 1600);
-    setPhase("reflection");
+  // ── Helpers de chat ────────────────────────────────────────────────────────
+  async function addNorth(text: string, delay = 0) {
+    if (delay) await sleep(delay);
+    setMsgs(prev => [...prev, { role:"north", text, id: Math.random().toString() }]);
+    scrollChat();
+  }
+  function addUser(text: string) {
+    setMsgs(prev => [...prev, { role:"user", text }]);
+    scrollChat();
+  }
+  function addChoices(choices: Array<{label:string;value:string}>) {
+    setMsgs(prev => [...prev, { role:"choices", choices, id: Math.random().toString() }]);
+    scrollChat();
+  }
+  function removeLastChoices() {
+    setMsgs(prev => prev.filter((m,i) => !(m.role === "choices" && i === prev.length-1)));
   }
 
-  // ── REFLEXO CONFIRMADO → iniciar exploração livre ─────────────────────────
-  async function handleReflectionYes() {
-    setMessages(prev => [...prev, { role: "user", content: "Sim, é isso." }]);
-    await addNorth(
-      "Perfeito.\n\nAntes de qualquer plano, quero entender melhor esse sonho.\n\nVou te fazer algumas perguntas. Não existe resposta certa — só a sua.",
-      1000
-    );
-    setPhase("explore");
-    await askExploreQuestion(0, []);
-  }
+  function showThinking() { setThinking(true); scrollChat(); }
+  function hideThinking() { setThinking(false); }
 
-  async function handleReflectionNo() {
-    setMessages(prev => [...prev, { role: "user", content: "Não exatamente." }]);
-    await addNorth("Conta mais. O que é mais importante que não captei?", 700);
-    setPhase("dream");
-    setTimeout(() => inputRef.current?.focus(), 200);
-  }
+  // ── Fluxo principal ────────────────────────────────────────────────────────
+  async function handleSend() {
+    const val = input.trim();
+    if (!val || disabled) return;
+    setInput(""); setDisabled(true);
 
-  // ── PERGUNTAS LIVRES ───────────────────────────────────────────────────────
-  async function askExploreQuestion(idx: number, history: any[]) {
-    if (idx >= 6) {
-      // Exploração concluída → ir para logística
-      await transitionToLogistics();
+    if (phase === "dream") {
+      setDreamText(val);
+      addUser(val);
+      setPhase("email");
+      await sleep(600);
+      showThinking();
+      await sleep(1200);
+      hideThinking();
+      // North reflecte o sonho
+      const reflection = await reflectDream(val);
+      setDreamReflection(reflection);
+      await addNorth(reflection);
+      await sleep(400);
+      addChoices([
+        { label:"Sim, é exatamente isso", value:"yes" },
+        { label:"Não exatamente...", value:"no" },
+      ]);
+      setDisabled(false);
       return;
     }
 
-    setSubmitting(true);
-    const res = await fetch("/api/north/explore", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        dream: dreamText,
-        reflection: dreamReflection,
-        history,
-        questionIndex: idx,
-      }),
-    });
-    setSubmitting(false);
-
-    if (!res.ok) { await transitionToLogistics(); return; }
-    const { question, done } = await res.json();
-
-    if (done || !question) {
-      await transitionToLogistics();
+    if (phase === "email") {
+      // Validar email
+      if (!val.includes("@") || !val.includes(".")) {
+        await addNorth("Esse email não parece válido. Pode tentar novamente?");
+        setDisabled(false);
+        return;
+      }
+      setEmail(val);
+      addUser(val);
+      await sleep(400);
+      showThinking();
+      // Criar conta
+      const ok = await signUpOrIn(val);
+      hideThinking();
+      if (!ok) {
+        await addNorth("Houve um problema com o email. Pode tentar novamente?");
+        setDisabled(false);
+        return;
+      }
+      setPhase("deepen");
+      await addNorth("Perfeito.\n\nAgora quero entender melhor esse sonho antes de construir o plano.");
+      await sleep(800);
+      await askDeepen(0, val, { dream: dreamText });
+      setDisabled(false);
       return;
     }
 
-    await addNorth(question, 1000);
-    setExploreIdx(idx);
-    setTimeout(() => inputRef.current?.focus(), 200);
+    if (phase === "deepen") {
+      addUser(val);
+      const newHistory = [...exploreHistory, { role:"user", content:val }];
+      setExploreHistory(newHistory);
+      const newAnswers = { ...answers, [`explore_${questionIdx}`]: val };
+      setAnswers(newAnswers);
+      const nextIdx = questionIdx + 1;
+      setQuestionIdx(nextIdx);
+      if (nextIdx < 4) {
+        await askDeepen(nextIdx, email, newAnswers);
+      } else {
+        // Passar para logística
+        setPhase("logistics");
+        await addNorth("Obrigado por isso.\n\nAgora preciso de alguns dados práticos para montar o plano.");
+        await sleep(600);
+        await askLogistics(0, newAnswers);
+      }
+      setDisabled(false);
+      return;
+    }
+
+    if (phase === "logistics") {
+      addUser(val);
+      const logKey = ["deadline","daily_time","best_time","current_level","constraints"][answers._logistics_step || 0];
+      const newAnswers = { ...answers, [logKey]: val, _logistics_step: (answers._logistics_step || 0) + 1 };
+      setAnswers(newAnswers);
+      const nextStep = newAnswers._logistics_step;
+      if (nextStep < 5) {
+        await askLogistics(nextStep, newAnswers);
+      } else {
+        // Construir plano
+        setPhase("building");
+        await buildPlan(newAnswers);
+      }
+      setDisabled(false);
+      return;
+    }
+
+    // Durante tone selection — input livre não usado (usa choices)
+    setDisabled(false);
   }
 
-  async function handleExploreAnswer() {
-    if (!input.trim() || submitting) return;
-    const answer = input.trim();
-    setInput("");
-
-    const newHistory = [...exploreHistory,
-      { role: "north", content: "..." },  // placeholder — será preenchido com a pergunta actual
-      { role: "user", content: answer },
-    ];
-
-    // Na prática, guarda a conversa real
-    const lastNorthMsg = messages.filter(m => m.role === "north").slice(-1)[0]?.content || "";
-    const updatedHistory = [...exploreHistory,
-      { role: "north", content: lastNorthMsg },
-      { role: "user", content: answer },
-    ];
-
-    setExploreHistory(updatedHistory);
-    setMessages(prev => [...prev, { role: "user", content: answer }]);
-
-    const nextIdx = exploreIdx + 1;
-
-    // North pode dar um breve acknowledgment antes da próxima pergunta
-    // (a API decide se há mais perguntas ou se já chega)
-    await askExploreQuestion(nextIdx, updatedHistory);
-  }
-
-  // ── TRANSIÇÃO PARA LOGÍSTICA ───────────────────────────────────────────────
-  async function transitionToLogistics() {
-    await addNorth(
-      "Já tenho uma boa noção do seu sonho.\n\nAgora preciso de alguns dados práticos para construir um plano que funcione com a sua vida real.",
-      1000
-    );
-    setPhase("logistics");
-    setLogIdx(0);
-    await addNorth(LOGISTICS[0].text, 700);
-    setTimeout(() => inputRef.current?.focus(), 200);
-  }
-
-  // ── PERGUNTAS LOGÍSTICAS ───────────────────────────────────────────────────
-  async function handleLogisticsAnswer() {
-    if (!input.trim()) return;
-    const answer = input.trim();
-    setInput("");
-    const q = LOGISTICS[logIdx];
-    const newAnswers = { ...answers, [q.id]: answer };
-    setAnswers(newAnswers);
-    setMessages(prev => [...prev, { role: "user", content: answer }]);
-
-    const next = logIdx + 1;
-    if (next < LOGISTICS.length) {
-      const ack = LOGISTICS_ACK[q.id];
-      if (ack) await addNorth(ack, 400);
-      setLogIdx(next);
-      await addNorth(LOGISTICS[next].text, 700);
-      setTimeout(() => inputRef.current?.focus(), 200);
-    } else {
-      await buildObjectives(newAnswers);
+  // ── Reflexo do sonho via IA ────────────────────────────────────────────────
+  async function reflectDream(dream: string): Promise<string> {
+    try {
+      const res = await fetch("/api/north/chat", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+          messages:[{ role:"user", content:`O utilizador disse que o seu sonho é: "${dream}". Reflecte este sonho de volta com mais precisão e profundidade emocional, numa frase de 1-2 linhas. Começa com "Você quer..." ou similar. Sê específico ao sonho deles. Responde em português.` }],
+          conversationType:"extraction", dreamId:null,
+        }),
+      });
+      const reader = res.body!.getReader(); const dec = new TextDecoder(); let full = "";
+      while(true) {
+        const {done,value} = await reader.read(); if(done)break;
+        for(const line of dec.decode(value).split("\n")) {
+          if(line.startsWith("data: ")){try{const d=JSON.parse(line.slice(6));if(d.text)full+=d.text;}catch{}}
+        }
+      }
+      return full || `Você quer ${dream}. Isso faz sentido?`;
+    } catch {
+      return `Você quer ${dream}.\n\nIsso ressoa com você?`;
     }
   }
 
-  // ── CONSTRUÇÃO DOS OBJECTIVOS ──────────────────────────────────────────────
-  async function buildObjectives(allAnswers: Record<string, string>) {
-    await addNorth(
-      "Tenho tudo que preciso.\n\nVou analisar o que você me contou e construir os pilares concretos do seu plano.\n\nIsso leva alguns segundos.",
-      600
-    );
-    setPhase("building");
-    setBuildError(null);
-    setThinking(true);
+  // ── Perguntas de aprofundamento (4 perguntas com IA) ──────────────────────
+  async function askDeepen(idx: number, _email: string, currentAnswers: Record<string,string>) {
+    showThinking();
+    try {
+      const questions = [
+        `Por que esse sonho importa para você agora — e não daqui a 5 anos?`,
+        `O que te impediu de começar até hoje?`,
+        `Se esse sonho se tornasse real amanhã, o que mudaria na sua vida?`,
+        `Quanto tempo por dia você consegue dedicar a isso de forma honesta?`,
+      ];
+      // Para as primeiras perguntas usar IA contextual, para outras fixas
+      if (idx === 0) {
+        await sleep(1000);
+        hideThinking();
+        await addNorth(questions[0]);
+      } else {
+        // Gerar pergunta contextualizada com IA
+        const context = Object.entries(currentAnswers)
+          .filter(([k]) => k.startsWith("explore_"))
+          .map(([,v]) => v).join(". ");
+        const res = await fetch("/api/north/explore", {
+          method:"POST", headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({
+            dreamText: currentAnswers.dream || dreamText,
+            history: exploreHistory,
+            questionIndex: idx,
+          }),
+        }).catch(() => null);
+        hideThinking();
+        if (res?.ok) {
+          const { question } = await res.json();
+          await addNorth(question || questions[idx] || questions[3]);
+        } else {
+          await addNorth(questions[idx] || questions[3]);
+        }
+      }
+    } catch {
+      hideThinking();
+      await addNorth("O que mais te motiva a perseguir esse sonho?");
+    }
+  }
+
+  // ── Perguntas de logística (5 fixas, apresentadas com warmth) ─────────────
+  async function askLogistics(step: number, _answers: Record<string,string>) {
+    showThinking();
+    await sleep(700);
+    hideThinking();
+    const questions = [
+      { text:"Quando você gostaria de ter esse sonho realizado?", placeholder:"Ex: em 6 meses, até dezembro, em 1 ano..." },
+      { text:"Quanto tempo por dia consegues dedicar de forma realista?", placeholder:"Ex: 30 minutos, 1 hora, 2 horas..." },
+      { text:"Qual é o melhor horário para ti? Manhã, tarde ou noite?", placeholder:"Ex: manhã cedo, depois do trabalho..." },
+      { text:"Como você descreveria seu nível atual nesse tema?", placeholder:"Ex: iniciante, tenho alguma base, intermediário..." },
+      { text:"Há algo que pode dificultar — compromissos, viagens, limitações?", placeholder:"Ex: trabalho intenso às segundas, viagens mensais..." },
+    ];
+    const q = questions[step];
+    if (q) {
+      setAnswers(prev => ({ ...prev, _placeholder: q.placeholder }));
+      await addNorth(q.text);
+    }
+  }
+
+  // ── Auth ───────────────────────────────────────────────────────────────────
+  async function signUpOrIn(emailVal: string): Promise<boolean> {
+    try {
+      const { createClient } = await import("@/lib/supabase/client");
+      const sb = createClient();
+      const { error } = await sb.auth.signInWithOtp({
+        email: emailVal,
+        options: { shouldCreateUser: true, emailRedirectTo: `${window.location.origin}/onboarding/callback` },
+      });
+      if (error) { console.error("Auth error:", error.message); return false; }
+      return true;
+    } catch (e) { console.error("Auth exception:", e); return false; }
+  }
+
+  // ── Construção do plano ────────────────────────────────────────────────────
+  async function buildPlan(allAnswers: Record<string,string>) {
+    setBuildErr(null);
+    const exploreCtx = Object.entries(allAnswers).filter(([k])=>k.startsWith("explore_")).map(([,v])=>v).join(" | ");
+
+    await addNorth("Tenho tudo o que preciso.\n\nVou analisar o que me contaste e construir os pilares do teu plano.\n\nIsso leva alguns segundos.");
+    showThinking();
 
     try {
-      // Verificar autenticação
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
-      if (authError || !user) {
-        setBuildError("Sessão expirada. Faça login novamente.");
-        setThinking(false);
-        return;
-      }
-
-      // Criar sonho
-      const { data: dream, error: dreamError } = await supabase.from("dreams").insert({
-        user_id: user.id, title: dreamText, status: "active",
-        maturity_stage: 3, activated_at: new Date().toISOString(),
-      }).select().single();
-
-      if (dreamError || !dream) {
-        console.error("Dream insert error:", dreamError?.message);
-        setBuildError("Erro ao salvar o sonho. Tenta novamente.");
-        setThinking(false);
-        return;
-      }
-      setDreamId(dream.id);
-
-      // Salvar memória
-      const exploreContext = exploreHistory
-        .filter(h => h.role === "user")
-        .map(h => h.content)
-        .join(" | ");
-
-      const { error: memError } = await supabase.from("dream_memories").insert({
-        dream_id: dream.id, user_id: user.id,
-        dream_profile: {
-          dream_declared: dreamText, dream_real: dreamReflection,
-          explore_context: exploreContext,
-          deadline_declared: allAnswers.deadline || null,
-          success_metric: allAnswers.success_metric || null,
-          current_level: allAnswers.current_level || null,
-          recurring_words: [], previous_attempts: [],
-          last_updated: new Date().toISOString(),
-        },
-        execution_profile: {
-          declared_times: [allAnswers.daily_time || "30 minutos"],
-          best_time: allAnswers.best_time || null,
-          constraints: allAnswers.constraints || null,
-          real_times: [], strong_days: [], weak_days: [],
-          avg_real_duration: 30, current_streak: 0, best_streak: 0,
-        },
-        emotional_profile: {
-          preferred_tone: "direct", reacts_badly_to: [], reacts_well_to: [],
-          crisis_moments: [], abandonment_triggers: [], resistance_language: [],
-        },
-        conversation_summaries: [],
-      });
-
-      if (memError) console.error("Memory insert error:", memError?.message);
-      // Não bloqueia — memória é importante mas não crítica
-
-      // Gerar objectivos
-      const res = await fetch("/api/north/extract-objectives", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          dreamId: dream.id, dreamTitle: dreamText, dreamReflection,
-          exploreContext,
-          deadline: allAnswers.deadline, dailyTime: allAnswers.daily_time,
-          bestTime: allAnswers.best_time, currentLevel: allAnswers.current_level,
-          constraints: allAnswers.constraints, successMetric: allAnswers.success_metric,
+      // 1. Criar sonho via API server-side
+      const dreamRes = await fetch("/api/dreams", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+          title: dreamText,
+          description: exploreCtx,
+          declared_deadline: allAnswers.deadline,
+          time_available: allAnswers.daily_time,
+          status: "active",
+          maturity_stage: 3,
         }),
       });
 
-      setThinking(false);
-
-      if (!res.ok) {
-        setBuildError(`Erro ao gerar objetivos (${res.status}). Tenta novamente.`);
-        return;
+      if (!dreamRes.ok) {
+        const err = await dreamRes.json().catch(() => ({}));
+        throw new Error(err.error || `Dream API ${dreamRes.status}`);
       }
 
-      const data = await res.json();
-      if (data.error) {
-        setBuildError("North não conseguiu gerar os objetivos. Tenta novamente.");
-        return;
-      }
+      const { dream } = await dreamRes.json();
+      if (!dream?.id) throw new Error("No dream returned");
+      setDreamId(dream.id);
 
-      const objs = data.objectives || [];
-      if (objs.length === 0) {
-        setBuildError("Nenhum objetivo foi gerado. Tenta novamente.");
-        return;
-      }
+      // 2. Actualizar memória com explore context + logística via API de memoria
+      await fetch("/api/dreams", {
+        method:"PUT",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+          dreamId: dream.id,
+          exploreContext: exploreCtx,
+          bestTime: allAnswers.best_time,
+          currentLevel: allAnswers.current_level,
+          constraints: allAnswers.constraints,
+        }),
+      }).catch(() => {}); // não bloqueia se falhar
 
-      setObjectives(objs);
-      await addNorth(
-        `Com base em tudo que você me contou, identifiquei ${objs.length} objetivos macro.\n\nVerifica se os pilares fazem sentido para você.`,
-        500
-      );
-      setPhase("review");
-
-    } catch (err: any) {
-      console.error("buildObjectives error:", err?.message);
-      setThinking(false);
-      setBuildError("Erro inesperado. Tenta novamente.");
-    }
-  }
-
-  // ── CONFIRMAR OBJECTIVOS → TOM ─────────────────────────────────────────────
-  async function handleObjectivesConfirm() {
-    setMessages(prev => [...prev, { role: "user", content: "Sim, faz sentido." }]);
-    await addNorth("Perfeito.\n\nÚltima coisa — como você quer que eu fale com você quando as coisas ficarem difíceis?", 800);
-    setPhase("tone");
-  }
-
-  // ── ESCOLHA DE TOM ─────────────────────────────────────────────────────────
-  async function handleToneSelect(t: string) {
-    setTone(t);
-    const labels: Record<string, string> = {
-      direct: "Direto.", gentle: "Gentil.", provocative: "Desafiador."
-    };
-    setMessages(prev => [...prev, { role: "user", content: labels[t] }]);
-
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      await supabase.from("users").update({
-        north_tone: t,
-        onboarding_completed_at: new Date().toISOString(),
-      }).eq("id", user.id);
-    }
-
-    if (dreamId && objectives.length > 0) {
-      generateAllBlocks(objectives, answers).catch(console.error);
-    }
-
-    setPhase("complete");
-    await addNorth(
-      "Seu plano está sendo construído.\n\nVai a Objetivos para acompanhar tudo.",
-      700
-    );
-    setTimeout(() => router.push(`/objectives?dreamId=${dreamId}`), 2500);
-  }
-
-  async function generateAllBlocks(objs: any[], allAnswers: Record<string, string>) {
-    for (const obj of objs) {
-      await fetch(`/api/objectives/${obj.id}`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          dailyTime: allAnswers.daily_time, bestTime: allAnswers.best_time,
-          deadline: allAnswers.deadline, currentLevel: allAnswers.current_level,
+      // 3. Gerar objectivos
+      const objRes = await fetch("/api/north/extract-objectives", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+          dreamId: dream.id,
+          dreamTitle: dreamText,
+          dreamReflection,
+          exploreContext: exploreCtx,
+          deadline: allAnswers.deadline,
+          dailyTime: allAnswers.daily_time,
+          bestTime: allAnswers.best_time,
+          currentLevel: allAnswers.current_level,
           constraints: allAnswers.constraints,
         }),
       });
+
+      hideThinking();
+
+      if (!objRes.ok) throw new Error(`Objectives API ${objRes.status}`);
+      const { objectives: objs } = await objRes.json();
+      if (!objs?.length) throw new Error("No objectives returned");
+
+      setObjectives(objs);
+      setPhase("objectives");
+      await addNorth(`Criei ${objs.length} objetivos para transformar esse sonho em realidade.\n\nVerifica se fazem sentido para ti.`);
+      await sleep(400);
+      setMsgs(prev => [...prev, {
+        role:"choices",
+        choices:[{ label:"Fazem sentido, continuar →", value:"ok" }],
+        id: Math.random().toString()
+      }]);
+
+    } catch (err: any) {
+      hideThinking();
+      console.error("buildPlan error:", err?.message);
+      setBuildErr(err?.message || "Erro inesperado");
+      await addNorth("Algo correu mal ao construir o plano. Podemos tentar de novo?");
+      setMsgs(prev => [...prev, {
+        role:"choices",
+        choices:[
+          { label:"Tentar novamente", value:"retry" },
+          { label:"Voltar ao início", value:"restart" },
+        ],
+        id: Math.random().toString()
+      }]);
     }
   }
 
-  // ── HANDLER CENTRAL DO INPUT ───────────────────────────────────────────────
-  function handleSubmit() {
-    if (phase === "dream")     return handleDreamSubmit();
-    if (phase === "explore")   return handleExploreAnswer();
-    if (phase === "logistics") return handleLogisticsAnswer();
+  // ── Escolhas clicáveis ─────────────────────────────────────────────────────
+  async function handleChoice(value: string) {
+    removeLastChoices();
+    setDisabled(true);
+
+    // Confirmação do reflexo do sonho
+    if (phase === "email" && (value === "yes" || value === "no")) {
+      if (value === "yes") {
+        addUser("Sim, é exatamente isso.");
+        await sleep(400);
+        await addNorth("Para guardar o teu progresso, preciso de um email.");
+        await sleep(300);
+        await addNorth("Qual é o teu email?");
+        // inputRef focus
+        setTimeout(() => inputRef.current?.focus(), 200);
+      } else {
+        addUser("Não exatamente...");
+        setPhase("dream");
+        await addNorth("Sem problema. Conta com as tuas próprias palavras — o que é que queres mesmo?");
+      }
+      setDisabled(false);
+      return;
+    }
+
+    // Após email enviado — aguardar confirmação
+    if (value === "email_sent_ok") {
+      setPhase("deepen");
+      await addNorth("Ótimo. Vou continuar aqui.\n\nPodes verificar o email a qualquer momento — o link fica válido.");
+      await sleep(600);
+      await askDeepen(0, email, answers);
+      setDisabled(false);
+      return;
+    }
+
+    // Objectivos ok
+    if (value === "ok" && phase === "objectives") {
+      setPhase("tone");
+      await addNorth("Uma última coisa.\n\nComo preferes que eu esteja nos momentos difíceis da jornada?");
+      await sleep(300);
+      addChoices([
+        { label:"Direto — objetivo e sem rodeios", value:"direct" },
+        { label:"Gentil — acolhedor e paciente",   value:"gentle" },
+        { label:"Provocador — que me desafie mais", value:"challenger" },
+      ]);
+      setDisabled(false);
+      return;
+    }
+
+    // Tom escolhido
+    if (["direct","gentle","challenger"].includes(value) && phase === "tone") {
+      const toneLabel: Record<string,string> = { direct:"Direto", gentle:"Gentil", challenger:"Provocador" };
+      addUser(toneLabel[value] || value);
+      setPhase("done");
+      await sleep(300);
+      showThinking();
+      // Gerar blocos em background
+      if (dreamId) {
+        fetch("/api/objectives", {
+          method:"GET",
+          headers:{"Content-Type":"application/json"},
+        }).catch(() => {});
+      }
+      await sleep(1500);
+      hideThinking();
+      await addNorth(`Entendido.\n\nO teu plano está pronto.\n\nO primeiro bloco foi agendado para as próximas 24 horas.\n\nSó precisas aparecer.`);
+      await sleep(1000);
+      router.push(dreamId ? `/objectives?dreamId=${dreamId}` : "/dashboard");
+      setDisabled(false);
+      return;
+    }
+
+    // Retry / restart
+    if (value === "retry") {
+      setDisabled(false);
+      setBuildErr(null);
+      setPhase("building");
+      const allAnswers = { ...answers };
+      await buildPlan(allAnswers);
+      return;
+    }
+    if (value === "restart") {
+      router.push("/onboarding");
+      return;
+    }
+
+    setDisabled(false);
   }
 
-  const showInput = ["dream", "explore", "logistics"].includes(phase);
-  const isLogistics = phase === "logistics";
-  const isExplore   = phase === "explore";
-  const currentLog  = LOGISTICS[logIdx];
+  // ── Email enviado — mostrar confirmação ───────────────────────────────────
+  useEffect(() => {
+    if (phase === "email" && email) {
+      // Mostrar mensagem de que o email foi enviado
+      setTimeout(async () => {
+        removeLastChoices();
+        await addNorth(`Link enviado para ${email}.\n\nPodes abrir o link noutra aba para entrar — ou continuar aqui mesmo, o teu progresso fica guardado.`);
+        addChoices([{ label:"Continuar aqui", value:"email_sent_ok" }]);
+      }, 400);
+    }
+  }, [email]);
 
-  // Progress indicator
-  const progressPhases = ["dream", "explore", "logistics", "building", "review", "tone", "complete"];
-  const progressPct = progressPhases.includes(phase)
-    ? Math.round((progressPhases.indexOf(phase) / (progressPhases.length - 1)) * 100)
-    : 0;
+  // ── Render ─────────────────────────────────────────────────────────────────
+  const logoProgress = { dream:1, email:2, deepen:3, logistics:4, building:5, objectives:5, tone:5, done:5 };
+  const pct = ((logoProgress[phase] || 1) / 5) * 100;
+  const placeholder = phase === "logistics" ? (answers._placeholder || "Escreve aqui...") :
+                      phase === "dream"     ? "O que queres mesmo..." :
+                      phase === "email"     ? "teu@email.com" :
+                      phase === "deepen"    ? "Conta com as tuas palavras..." :
+                      "Escreve aqui...";
+  const showInput = !["building","objectives","tone","done"].includes(phase) && !disabled || phase === "deepen" || phase === "logistics";
 
   return (
-    <div style={{ minHeight: "100vh", background: T.bg, color: T.light, fontFamily: "Inter, sans-serif", display: "flex", flexDirection: "column" }}>
+    <div style={{ minHeight:"100vh", height:"100vh", background:T.bg, color:T.light,
+      fontFamily:"Inter,sans-serif", display:"flex", flexDirection:"column", overflow:"hidden" }}>
 
-      {/* Header */}
-      <div style={{ padding: "24px 24px 0", maxWidth: "600px", margin: "0 auto", width: "100%", boxSizing: "border-box" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "32px" }}>
-          <p style={{ fontFamily: "'Playfair Display', serif", fontSize: "16px", fontWeight: 700, letterSpacing: "0.06em", margin: 0 }}>DP.</p>
-          {/* Barra de progresso geral */}
-          <div style={{ width: "120px" }}>
-            <div style={{ height: "2px", background: T.border, borderRadius: "999px" }}>
-              <div style={{ height: "100%", width: `${progressPct}%`, background: T.blue, borderRadius: "999px", transition: "width 600ms ease" }} />
-            </div>
-          </div>
+      {/* Header minimalista */}
+      <header style={{ padding:"14px 24px", display:"flex", alignItems:"center", justifyContent:"space-between", flexShrink:0 }}>
+        <p style={{ fontFamily:"'Playfair Display',serif", fontSize:"18px", fontWeight:700, margin:0, letterSpacing:"0.04em" }}>DP.</p>
+        {/* Barra de progresso */}
+        <div style={{ width:"120px", height:"2px", background:T.border, borderRadius:"999px", overflow:"hidden" }}>
+          <div style={{ height:"100%", width:`${pct}%`, background:T.blue, borderRadius:"999px", transition:"width 600ms ease" }} />
         </div>
+        <button onClick={() => router.push("/dashboard")}
+          style={{ background:"none", border:"none", color:T.silver, cursor:"pointer", fontSize:"11px", fontFamily:"Inter,sans-serif" }}>
+          Sair
+        </button>
+      </header>
 
-        {/* Indicador de fase */}
-        {isExplore && (
-          <div style={{ marginBottom: "20px" }}>
-            <span style={{ fontSize: "10px", color: T.silver, textTransform: "uppercase", letterSpacing: "0.1em" }}>
-              Entendendo o sonho · pergunta {exploreIdx + 1}
-            </span>
-          </div>
-        )}
-        {isLogistics && (
-          <div style={{ marginBottom: "20px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
-              <span style={{ fontSize: "10px", color: T.silver, textTransform: "uppercase", letterSpacing: "0.1em" }}>
-                Dados do plano · {logIdx + 1} de {LOGISTICS.length}
-              </span>
-            </div>
-            <div style={{ height: "2px", background: T.border, borderRadius: "999px" }}>
-              <div style={{ height: "100%", width: `${((logIdx + 1) / LOGISTICS.length) * 100}%`, background: T.amber, borderRadius: "999px", transition: "width 400ms ease" }} />
-            </div>
-          </div>
-        )}
-      </div>
+      {/* Chat area */}
+      <div style={{ flex:1, overflowY:"auto", padding:"8px 0 16px", display:"flex", flexDirection:"column", gap:"10px", maxWidth:"640px", width:"100%", margin:"0 auto", boxSizing:"border-box", paddingLeft:"24px", paddingRight:"24px" }}>
 
-      {/* Conversa */}
-      <div style={{ flex: 1, padding: "0 24px", maxWidth: "600px", margin: "0 auto", width: "100%", boxSizing: "border-box" }}>
-        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-
-          {messages.map((m, i) => (
-            <div key={i} style={{
-              maxWidth: m.role === "user" ? "82%" : "100%",
-              alignSelf: m.role === "user" ? "flex-end" : "flex-start",
-              padding: "12px 18px", borderRadius: "12px",
-              background: m.role === "user" ? T.surface : T.card,
-              border: `1px solid ${T.border}`,
-              borderLeft: m.role === "north" ? `2px solid ${T.silver}` : undefined,
-            }}>
-              <p style={{ margin: 0, fontSize: "14px", lineHeight: 1.85, fontWeight: 300,
-                fontStyle: m.role === "north" ? "italic" : "normal", whiteSpace: "pre-wrap" }}>
-                {m.content}
-              </p>
-            </div>
-          ))}
-
-          {(thinking || submitting) && (
-            <div style={{ padding: "12px 18px", background: T.card, borderRadius: "12px",
-              border: `1px solid ${T.border}`, borderLeft: `2px solid ${T.silver}`, alignSelf: "flex-start" }}>
-              <p style={{ margin: 0, fontSize: "13px", color: T.silver, fontStyle: "italic" }}>
-                North está pensando...
-              </p>
-            </div>
-          )}
-
-          {/* Erro na fase building + botão retry */}
-          {buildError && phase === "building" && (
-            <div style={{ padding: "16px 20px", background: `${T.amber}11`, border: `1px solid ${T.amber}44`, borderRadius: "10px" }}>
-              <p style={{ margin: "0 0 12px", fontSize: "13px", color: T.amber, lineHeight: 1.5 }}>{buildError}</p>
-              <div style={{ display: "flex", gap: "8px" }}>
-                <button onClick={() => buildObjectives(answers)}
-                  style={{ flex: 1, padding: "10px", background: T.blue, border: "none", borderRadius: "8px", color: T.light, fontSize: "12px", fontWeight: 500, cursor: "pointer", fontFamily: "Inter, sans-serif" }}>
-                  Tentar novamente
-                </button>
-                <button onClick={() => router.push("/dashboard")}
-                  style={{ flex: 1, padding: "10px", background: "transparent", border: `1px solid ${T.border}`, borderRadius: "8px", color: T.silver, fontSize: "12px", cursor: "pointer", fontFamily: "Inter, sans-serif" }}>
-                  Ir para o dashboard
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Sim / Não exatamente */}
-          {phase === "reflection" && (
-            <div style={{ display: "flex", gap: "8px" }}>
-              <button onClick={handleReflectionYes}
-                style={{ flex: 1, padding: "12px", background: T.card, border: `1px solid ${T.blue}44`, borderRadius: "8px", color: T.light, fontSize: "13px", cursor: "pointer", fontFamily: "Inter, sans-serif" }}>
-                Sim, é isso
-              </button>
-              <button onClick={handleReflectionNo}
-                style={{ flex: 1, padding: "12px", background: "transparent", border: `1px solid ${T.border}`, borderRadius: "8px", color: T.silver, fontSize: "13px", cursor: "pointer", fontFamily: "Inter, sans-serif" }}>
-                Não exatamente
-              </button>
-            </div>
-          )}
-
-          {/* Revisão de objectivos */}
-          {phase === "review" && objectives.length > 0 && (
-            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-              {objectives.map((obj, i) => (
-                <div key={obj.id || i} style={{ padding: "14px 18px", background: T.surface,
-                  border: `1px solid ${T.blue}33`, borderLeft: `3px solid ${T.blue}`, borderRadius: "10px" }}>
-                  <div style={{ display: "flex", gap: "12px" }}>
-                    <span style={{ fontSize: "10px", color: T.blue, fontWeight: 700, fontFamily: "monospace", paddingTop: "3px", minWidth: "22px" }}>
-                      {String(i + 1).padStart(2, "0")}
-                    </span>
-                    <div>
-                      <p style={{ margin: "0 0 3px", fontSize: "14px", fontWeight: 600 }}>{obj.title}</p>
-                      {obj.description && <p style={{ margin: "0 0 3px", fontSize: "12px", color: T.light, lineHeight: 1.5 }}>{obj.description}</p>}
-                      {obj.why && <p style={{ margin: 0, fontSize: "11px", color: T.silver, fontStyle: "italic" }}>→ {obj.why}</p>}
-                    </div>
-                  </div>
-                </div>
-              ))}
-              <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
-                <button onClick={handleObjectivesConfirm}
-                  style={{ flex: 2, padding: "12px", background: T.blue, border: "none", borderRadius: "8px", color: T.light, fontSize: "13px", fontWeight: 500, cursor: "pointer", fontFamily: "Inter, sans-serif" }}>
-                  Perfeito, avançar →
-                </button>
-                <button onClick={() => {
-                  setObjectives([]);
-                  setMessages(prev => [...prev, { role: "north", content: "Tudo bem. Me conta o sonho de novo com suas próprias palavras." }]);
-                  setPhase("dream");
-                  setInput("");
-                  setTimeout(() => inputRef.current?.focus(), 200);
-                }} style={{ flex: 1, padding: "12px", background: "transparent", border: `1px solid ${T.border}`, borderRadius: "8px", color: T.silver, fontSize: "13px", cursor: "pointer", fontFamily: "Inter, sans-serif" }}>
-                  Ajustar
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Escolha de tom */}
-          {phase === "tone" && !tone && (
-            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-              {[
-                { key: "direct",      label: "Direto",      desc: "Objetivo, sem rodeios" },
-                { key: "gentle",      label: "Gentil",      desc: "Acolhedor e paciente" },
-                { key: "provocative", label: "Desafiador",  desc: "Questiona mais, aceita menos desculpas" },
-              ].map(t => (
-                <button key={t.key} onClick={() => handleToneSelect(t.key)}
-                  style={{ padding: "14px 18px", background: T.surface, border: `1px solid ${T.border}`, borderRadius: "8px",
-                    color: T.light, fontSize: "13px", cursor: "pointer", fontFamily: "Inter, sans-serif",
-                    textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontWeight: 600 }}>{t.label}</span>
-                  <span style={{ color: T.silver, fontSize: "12px" }}>{t.desc}</span>
-                </button>
-              ))}
-            </div>
-          )}
-
-          <div ref={bottomRef} style={{ height: "1px" }} />
-        </div>
-      </div>
-
-      {/* Input */}
-      {/* Botão de escape — sempre visível excepto na intro */}
-      {phase !== "intro" && phase !== "complete" && !showInput && phase !== "review" && phase !== "tone" && (
-        <div style={{ padding: "0 24px 24px", maxWidth: "600px", margin: "0 auto", width: "100%", boxSizing: "border-box" }}>
-          <button onClick={() => router.push("/dashboard")}
-            style={{ width: "100%", padding: "11px", background: "transparent", border: `1px solid ${T.border}`, borderRadius: "10px", color: T.silver, fontSize: "12px", cursor: "pointer", fontFamily: "Inter, sans-serif" }}>
-            {phase === "building" ? "Cancelar e ir para o dashboard" : "← Voltar ao dashboard"}
-          </button>
-        </div>
-      )}
-
-      {showInput && (
-        <div style={{ padding: "16px 24px 32px", maxWidth: "600px", margin: "0 auto", width: "100%", boxSizing: "border-box" }}>
-          {/* Placeholder contextual */}
-          {isExplore && (
-            <p style={{ fontSize: "11px", color: T.silver, marginBottom: "8px", letterSpacing: "0.04em" }}>
-              Responde com o que vier — sem filtro.
-            </p>
-          )}
-          {isLogistics && currentLog && (
-            <p style={{ fontSize: "11px", color: T.amber, marginBottom: "8px", letterSpacing: "0.04em", opacity: 0.8 }}>
-              Dados do plano
-            </p>
-          )}
-          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "4px" }}>
-            <button onClick={() => router.push("/dashboard")}
-              style={{ background: "none", border: "none", color: T.silver, fontSize: "11px", cursor: "pointer", fontFamily: "Inter, sans-serif", opacity: 0.6 }}>
-              Sair
-            </button>
-          </div>
-          <div style={{ display: "flex", gap: "8px" }}>
-            <textarea
-              ref={inputRef}
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSubmit(); }
-              }}
-              placeholder={
-                phase === "dream"     ? "Qual é o sonho que você não para de adiar?" :
-                phase === "explore"   ? "Responde o que vier à mente..." :
-                currentLog?.placeholder || ""
-              }
-              rows={2}
-              disabled={submitting || thinking}
-              style={{ flex: 1, background: T.card, border: `1px solid ${
-                isLogistics ? T.amber + "44" : T.border
-              }`, borderRadius: "10px", padding: "12px 16px", color: T.light, fontSize: "14px",
-                fontFamily: "Inter, sans-serif", resize: "none", outline: "none", lineHeight: 1.5,
-                opacity: submitting || thinking ? 0.6 : 1 }}
+        {msgs.map((m, i) => {
+          if (m.role === "north") return (
+            <NorthMsg key={m.id || i} text={m.text!}
+              onDone={i === msgs.length-1 ? () => { if (!disabled && showInput) inputRef.current?.focus(); } : undefined}
             />
-            <button
-              onClick={handleSubmit}
-              disabled={!input.trim() || submitting || thinking}
-              style={{ padding: "12px 18px", background: input.trim() && !submitting ? T.blue : T.border,
-                border: "none", borderRadius: "10px", color: T.light, fontSize: "13px",
-                fontWeight: 500, cursor: "pointer", fontFamily: "Inter, sans-serif" }}>
+          );
+          if (m.role === "user") return <UserMsg key={i} text={m.text!} />;
+          if (m.role === "choices") return (
+            <div key={m.id || i} style={{ display:"flex", flexDirection:"column", gap:"6px", alignSelf:"flex-start", maxWidth:"84%" }}>
+              {m.choices!.map(c => (
+                <button key={c.value} onClick={() => !disabled && handleChoice(c.value)}
+                  style={{ padding:"10px 18px", background:c.value==="ok"||c.value==="yes"||c.value==="email_sent_ok"?`${T.blue}22`:T.surface,
+                    border:`1px solid ${c.value==="ok"||c.value==="yes"||c.value==="email_sent_ok"?T.blue+"55":T.border}`,
+                    borderRadius:"8px", color:c.value==="ok"||c.value==="yes"||c.value==="email_sent_ok"?T.blue:T.silver,
+                    fontSize:"13px", cursor:disabled?"default":"pointer", fontFamily:"Inter,sans-serif",
+                    textAlign:"left", transition:"all 150ms ease" }}>
+                  {c.label}
+                </button>
+              ))}
+            </div>
+          );
+          return null;
+        })}
+
+        {/* Thinking indicator */}
+        {thinking && (
+          <div style={{ padding:"10px 16px", background:T.card, borderRadius:"12px 12px 12px 2px",
+            border:`1px solid ${T.border}`, borderLeft:`2px solid ${T.silver}44`, alignSelf:"flex-start" }}>
+            <p style={{ margin:0, fontSize:"12px", color:T.silver, fontStyle:"italic" }}>North está a pensar...</p>
+          </div>
+        )}
+
+        {/* Objectivos gerados */}
+        {phase === "objectives" && objectives.length > 0 && (
+          <div style={{ alignSelf:"flex-start", width:"100%", marginTop:"4px" }}>
+            {objectives.map((obj: any, i: number) => (
+              <div key={obj.id || i} style={{ display:"flex", gap:"10px", marginBottom:"8px", padding:"10px 14px",
+                background:T.card, border:`1px solid ${T.border}`, borderRadius:"10px" }}>
+                <span style={{ fontSize:"11px", color:T.blue, fontFamily:"monospace", fontWeight:700, minWidth:"20px" }}>
+                  {String(i+1).padStart(2,"0")}
+                </span>
+                <div>
+                  <p style={{ margin:"0 0 2px", fontSize:"13px", fontWeight:500, color:T.light }}>{obj.title}</p>
+                  {obj.description && <p style={{ margin:0, fontSize:"11px", color:T.silver, lineHeight:1.4 }}>{obj.description}</p>}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div ref={chatEndRef} style={{ height:"4px" }} />
+      </div>
+
+      {/* Input area */}
+      {!["building","objectives","tone","done"].includes(phase) && (
+        <div style={{ padding:"12px 24px 20px", flexShrink:0, maxWidth:"640px", width:"100%", margin:"0 auto", boxSizing:"border-box" }}>
+          <div style={{ display:"flex", gap:"8px" }}>
+            <input ref={inputRef} value={input} onChange={e => setInput(e.target.value)}
+              onKeyDown={e => e.key==="Enter" && handleSend()}
+              placeholder={placeholder}
+              type={phase==="email"?"email":"text"}
+              disabled={disabled}
+              style={{ flex:1, background:T.card, border:`1px solid ${T.border}`, borderRadius:"10px",
+                padding:"12px 16px", color:T.light, fontSize:"14px", fontFamily:"Inter,sans-serif",
+                outline:"none", opacity:disabled?0.5:1, transition:"border-color 150ms ease" }}
+              onFocus={e => e.target.style.borderColor=T.blue+"55"}
+              onBlur={e => e.target.style.borderColor=T.border}
+            />
+            <button onClick={handleSend} disabled={disabled || !input.trim()}
+              style={{ padding:"12px 18px", background:input.trim()&&!disabled?T.blue:T.border,
+                border:"none", borderRadius:"10px", color:T.light, fontSize:"14px",
+                cursor:input.trim()&&!disabled?"pointer":"default", transition:"background 150ms ease" }}>
               →
             </button>
           </div>
@@ -640,7 +617,7 @@ function OnboardingContent() {
 
 export default function OnboardingPage() {
   return (
-    <Suspense fallback={<div style={{ minHeight: "100vh", background: "#0D0D14" }} />}>
+    <Suspense fallback={<div style={{ minHeight:"100vh", background:"#0D0D14" }} />}>
       <OnboardingContent />
     </Suspense>
   );
