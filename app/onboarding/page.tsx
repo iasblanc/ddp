@@ -1,6 +1,6 @@
 // @ts-nocheck
 "use client";
-import { useState, useEffect, useRef, Suspense } from "react";
+import React, { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 // ── Tokens ────────────────────────────────────────────────────────────────────
@@ -68,6 +68,7 @@ function OnboardingContent() {
   const [input,      setInput]      = useState("");
   const [thinking,   setThinking]   = useState(false);
   const [phase,      setPhase]      = useState<"dream"|"email"|"deepen"|"logistics"|"building"|"objectives"|"tone"|"done">("dream");
+  const [isLoggedIn, setIsLoggedIn]  = useState(false);
   const [disabled,   setDisabled]   = useState(false);
 
   // Dados colectados
@@ -86,7 +87,18 @@ function OnboardingContent() {
   // ── Inicialização ─────────────────────────────────────────────────────────
   useEffect(() => {
     const prefill = params.get("dream") || "";
-    setTimeout(async () => {
+    (async () => {
+      // Verificar se já está autenticado
+      try {
+        const { createClient } = await import("@/lib/supabase/client");
+        const sb = createClient();
+        const { data: { user } } = await sb.auth.getUser();
+        if (user) {
+          setIsLoggedIn(true);
+        }
+      } catch {}
+
+      await sleep(400);
       await addNorth("Olá. Eu sou North.\n\nEstou aqui para te ajudar a transformar isso em algo real.\n\nNão tenho pressa.", 0);
       await sleep(1800);
       await addNorth("Qual é o sonho que você não para de adiar?", 0);
@@ -94,7 +106,7 @@ function OnboardingContent() {
         await sleep(600);
         setInput(prefill);
       }
-    }, 400);
+    })();
   }, []);
 
   // ── Helpers de chat ────────────────────────────────────────────────────────
@@ -127,18 +139,18 @@ function OnboardingContent() {
     if (phase === "dream") {
       setDreamText(val);
       addUser(val);
-      setPhase("email");
+      // Se já logado, ir directo para reflexão sem pedir email
+      setPhase(isLoggedIn ? "deepen_pending_reflect" as any : "email");
       await sleep(600);
       showThinking();
       await sleep(1200);
       hideThinking();
-      // North reflecte o sonho
       const reflection = await reflectDream(val);
       setDreamReflection(reflection);
       await addNorth(reflection);
       await sleep(400);
       addChoices([
-        { label:"Sim, é exatamente isso", value:"yes" },
+        { label:"Sim, é exatamente isso", value: isLoggedIn ? "yes_loggedin" : "yes" },
         { label:"Não exatamente...", value:"no" },
       ]);
       setDisabled(false);
@@ -409,15 +421,25 @@ function OnboardingContent() {
     removeLastChoices();
     setDisabled(true);
 
-    // Confirmação do reflexo do sonho
-    if (phase === "email" && (value === "yes" || value === "no")) {
+    // Confirmação do reflexo do sonho — utilizador JÁ LOGADO
+    if (value === "yes_loggedin") {
+      addUser("Sim, é exatamente isso.");
+      setPhase("deepen");
+      await addNorth("Perfeito.\n\nAgora quero entender melhor esse sonho antes de construir o plano.");
+      await sleep(800);
+      await askDeepen(0, "", { dream: dreamText });
+      setDisabled(false);
+      return;
+    }
+
+    // Confirmação do reflexo do sonho — utilizador NÃO logado
+    if ((phase === "email" || phase === ("deepen_pending_reflect" as any)) && (value === "yes" || value === "no")) {
       if (value === "yes") {
         addUser("Sim, é exatamente isso.");
         await sleep(400);
         await addNorth("Para guardar o teu progresso, preciso de um email.");
         await sleep(300);
         await addNorth("Qual é o teu email?");
-        // inputRef focus
         setTimeout(() => inputRef.current?.focus(), 200);
       } else {
         addUser("Não exatamente...");
@@ -493,16 +515,18 @@ function OnboardingContent() {
   }
 
   // ── Email enviado — mostrar confirmação ───────────────────────────────────
+  // Só disparado quando um utilizador novo submete o email
+  const emailSentRef = React.useRef(false);
   useEffect(() => {
-    if (phase === "email" && email) {
-      // Mostrar mensagem de que o email foi enviado
+    if (phase === "email" && email && !isLoggedIn && !emailSentRef.current) {
+      emailSentRef.current = true;
       setTimeout(async () => {
         removeLastChoices();
         await addNorth(`Link enviado para ${email}.\n\nPodes abrir o link noutra aba para entrar — ou continuar aqui mesmo, o teu progresso fica guardado.`);
         addChoices([{ label:"Continuar aqui", value:"email_sent_ok" }]);
       }, 400);
     }
-  }, [email]);
+  }, [email, phase]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
   const logoProgress = { dream:1, email:2, deepen:3, logistics:4, building:5, objectives:5, tone:5, done:5 };
