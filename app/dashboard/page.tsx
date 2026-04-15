@@ -396,6 +396,13 @@ function DashboardContent() {
               </div>
             )}
 
+            {/* Link para progresso */}
+            <button onClick={()=>router.push(`/progress?dreamId=${activeDream.id}`)}
+              style={{width:"100%",padding:"10px 12px",background:`${T.green}0A`,border:`1px solid ${T.green}22`,borderRadius:"8px",color:T.green,fontSize:"12px",cursor:"pointer",fontFamily:"Inter,sans-serif",textAlign:"left",display:"flex",alignItems:"center",gap:"8px"}}>
+              <span style={{fontSize:"14px"}}>📈</span>
+              Ver progresso da jornada
+            </button>
+
             {/* Conversa com North */}
             <div style={{padding:"14px 18px",borderBottom:`1px solid ${T.border}`}}>
               <p style={{margin:"0 0 8px",fontSize:"9px",color:T.silver,textTransform:"uppercase",letterSpacing:"0.1em"}}>Conversa com North</p>
